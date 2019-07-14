@@ -1,6 +1,6 @@
 import numpy as np
-
-
+from gauss_codes import gknot
+import os
 
 def get_cnum(c):
     """
@@ -17,16 +17,17 @@ def get_cnum(c):
 
     if c < 0:
         if c % 1 != 0:
-            return abs(c + 0.5)
-        else:
-            return abs(c)
+            c += 0.5
     else:
         if c % 1 != 0:
-            return abs(c - 0.5)
-        else:
-            return c
+            c -= 0.5
 
-def get_c2_y(c2):
+    return int(abs(c))
+
+def get_c2_y(cross_seen, c2):
+    if not cross_seen:
+        return 0
+
     if c2 < 0:
         if c2 % 1 != 0:
             # vertical understrand, negative crossing
@@ -79,6 +80,40 @@ def get_c2_y(c2):
 
     return c2_y
 
+def get_path(path, cross_seen, x1, x2, y1, y2):
+    pass
+
+
+def build_stupid_graph(gcode):
+    n = len(gcode)//2
+    path = [(-1, 0, None)]
+    cross_x = [i*n for i in range(n)]
+    cross_seen = [False for i in range(n)]
+
+    # if gcode[0] < 0:
+    #     # going under
+    #     path.append((0, 0, -1))
+
+    # else:
+    #     # going over
+    #     path.append((0, 0, +1))
+
+    # path.append((1, 0, None))
+
+    for i in range(len(gcode) - 1):
+        c1, c2 = gcode[i], gcode[i+1]
+        c1i = get_cnum(c1) - 1
+        c2i = get_cnum(c2) - 1
+        x1, x2 = cross_x[c1i], cross_x[c2i]
+        y1 = get_c2_y(cross_seen[c1i], c1)
+        y2 = get_c2_y(cross_seen[c2i], c2)
+        cross_seen[c1i-1] = True
+
+        print(f"c: {c1} → {c2}, x: {x1} → {x2}, y: {y1} → {y2}")
+
+        get_path(path, cross_seen, x1, x2, y1, y2)
+
+
 
 def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
     """
@@ -94,8 +129,6 @@ def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
     preamble += "\\usepackage{tikz}\n"
     preamble += "\\begin{document}\n"
     preamble += "\\begin{tikzpicture}\n"
-
-
 
     drawing = ""
     for path in draw_paths:
@@ -122,3 +155,7 @@ def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
     os.system(f"zathura {fname}.pdf")
     os.chdir("..")
     return out_str
+
+if __name__ == '__main__':
+    knot = gknot[(8, 4)]
+    build_stupid_graph(knot)
