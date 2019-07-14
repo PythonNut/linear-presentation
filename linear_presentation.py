@@ -153,6 +153,7 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
                 add_c_shape(path, x1+1, x2, y2)
 
             else:
+                print('oh no2')
 
         elif y2 == 0:
             # We want to go into the second crossing horizontally
@@ -194,6 +195,8 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
                 # The exit and approach are on opposite sides and at least one has an containing envelope.
 
                 print("oh no4")
+
+
 
 def build_stupid_graph(gcode):
     # The total number of crossings (n) is going to be 1/2 the total length of
