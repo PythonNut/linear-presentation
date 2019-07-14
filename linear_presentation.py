@@ -12,15 +12,17 @@ def sign(i):
 
 def get_cnum(c):
     """
+    Extract the crossing number corresponding to an entry in a gauss code.
+
+    Args:
+
     Crossings in our gauss code are formatted like
 
     (+/-) (crossing number).(0/0.5)
 
-    where + indicates we're on an overstrand, - indicates we're on an
-    understrand, 0 indicates the crossing is positive, and .5 indicates the
-    crossing is negative.
-
-    We just want to extract the crossing number here
+    where (+) indicates we're on an overstrand, (-) indicates we're on an
+    understrand, a trailing (.0) indicates the crossing is positive, and a
+    trailing (.5) indicates the crossing is negative.
     """
 
     if c < 0:
@@ -33,6 +35,9 @@ def get_cnum(c):
     return int(abs(c))
 
 def get_y_in(cross_seen, c):
+    """
+    Get the incident y value corresponding to the term
+    """
     if not cross_seen:
         return 0
 
@@ -134,10 +139,6 @@ def get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2):
                 add_c_shape(path, x1, x2, y1)
             else:
                 print('oh no1')
-            # y = y1 * (delta//2 + 1)
-            # path.append((x1, y))
-            # path.append((x2, y))
-            # path.append((x2, 0))
 
     else:
         if y1 == 0:
@@ -150,17 +151,7 @@ def get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2):
             else:
                 print('oh no2')
 
-            # y = y2 * (delta//2 + 1)
-            # add_c_shape(path, x1 + 1, x2, y2)
-            # path.append((x1 + 1, y))
-            # path.append((x2, y))
-            # path.append((x2, 0))
-
         elif y2 == 0:
-            # path.append((x1, y1))
-            # y = y1 * (delta//2 + 1)
-            # path.append((x1, y))
-
             # # We want to go into the second crossing horizontally
             e1 = get_envelope(c_shapes, x1, y1)
             e2 = get_envelope(c_shapes, x2 - 1, y1)
@@ -172,14 +163,6 @@ def get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2):
             else:
                 print('oh no3')
 
-            # path.append((x, y))
-            # path.append((x,0))
-            # path.append((x+1,0))
-
-            # gaps.append(c2i)
-            # path.append((x2, y))
-            # path.append((x2, 0))
-
         else:
             e1 = get_envelope(c_shapes, x1, y1)
             e2 = get_envelope(c_shapes, x2, y2)
@@ -189,27 +172,6 @@ def get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2):
                 add_c_shape(path, x_psuedo, x2, y2)
             else:
                 print("oh no4")
-
-            # path.append((x1, y1))
-            # y = y1 * (delta//2 + 1)
-            # path.append((x1, y))
-
-            # print(y1, y2)
-            # if x1 < x2:
-            #     possible_gaps = list(filter(lambda x: x1 <= x and x <= x2, gaps))
-            #     cross_gap = max(possible_gaps)
-
-            #     x_gap = cross_x[cross_gap] - delta
-            # else:
-            #     possible_gaps = list(filter(lambda x: x2 <= x and x <= x1, gaps))
-            #     cross_gap = min(possible_gaps)
-            #     x_gap = cross_x[cross_gap] + delta
-
-            # path.append((x_gap, y))
-            # path.append((x_gap, -1 * y))
-            # path.append((x2, y))
-            # path.append((x2, 0))
-
 
 
 def build_stupid_graph(gcode):
@@ -321,12 +283,12 @@ def draw_presentation(draw_paths, x_vals, signs, fname="test_gauss"):
 
 if __name__ == '__main__':
     # knot = gknot[(6,5)]
-    # knot = gknot[(8, 4)]
+    knot = gknot[(8, 4)]
     # knot = gknot[(3, 1)]
     # knot = gknot[(6,4)]
     # knot = gknot[(11,2)]
     # knot = gknot[(5,2)]
-    knot = gknot[(4,1)]
+    # knot = gknot[(4,1)]
     path, cross_x, signs = build_stupid_graph(knot)
 
     # pathological_test = [
