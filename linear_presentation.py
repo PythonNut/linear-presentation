@@ -93,11 +93,13 @@ def get_y_in(cross_seen, c):
 
     return c_y
 
+
 def add_c_shape(path, x1, x2, y_sign):
     y = y_sign * abs(x2 - x1)
     path.append((x1, y))
     path.append((x2, y))
     path.append((x2, 0))
+
 
 def get_c_shapes(path):
     intervals = []
@@ -107,6 +109,7 @@ def get_c_shapes(path):
            intervals.append((min(p1x, p2x), max(p1x, p2x), sign(p1y)))
 
     return intervals
+
 
 def get_envelope(c_shapes, x, y):
     y = sign(y)
@@ -121,6 +124,17 @@ def get_envelope(c_shapes, x, y):
                 min_c = (cx1, cx2)
 
     return min_c
+
+def get_gap_x(c1, c2, l_gap_c, n):
+    # In this case, we're entering _in_ through the gap, so we want to hug a
+    # different side.
+    if l_gap_c < c1:
+        x_shift = (l_gap_c - c2 + 1) // 2
+    # Exiting gap
+    else:
+        x_shift = (l_gap_c - c1 + 1) // 2
+
+    return (l_gap_c * (n + 3)) + 1 + x_shift
 
 def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
     n = len(cross_x)
