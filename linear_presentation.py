@@ -80,8 +80,27 @@ def get_c2_y(cross_seen, c2):
 
     return c2_y
 
-def get_path(path, cross_seen, x1, x2, y1, y2):
-    pass
+def get_path(path, cross_seen, c1i, c2i, x1, x2, y1, y2):
+    delta = abs(c2i - c1i)
+    if y1 == y2:
+        if y1 == 0:
+            # easy
+            path.append((x2, y2))
+
+        else:
+            y = y1 * (delta+1)//2
+            path.append((x1, y))
+            path.append((x2, y))
+            path.append((x2, 0))
+
+    else:
+        if y1 == 0:
+            path.append((x1 + 1, y1))
+            y = y1 * (delta+1)//2
+            path.append((x1 + 1, y))
+            path.append((x2, y))
+            path.append((x2, 0))
+
 
 
 def build_stupid_graph(gcode):
@@ -93,11 +112,8 @@ def build_stupid_graph(gcode):
     # Initialize the drawing path, which is currently a list of tuples
     # representing coordinates along the path that we are going to draw.
     #
-    # The current form for these coordinates is (<x>, <y>, <o>), where o
-    # represents "orientation." That is, whether we're going through an over or
-    # under crossing here. It's likely that this information will prove
-    # superfluous, so we should remove it later. FIXME!
-    path = [(-1, 0, None)]
+    # The current form for these coordinates is (<x>, <y>)
+    path = [(0, 0)]
 
     # A list giving us the x coordinates at which each crossing will be drawn.
     # Initially, we will make the drawing grid _way_ larger than it needs to be,
@@ -119,12 +135,14 @@ def build_stupid_graph(gcode):
         x1, x2 = cross_x[c1i], cross_x[c2i]
         y1 = get_c2_y(cross_seen[c1i], c1)
         y2 = get_c2_y(cross_seen[c2i], c2)
-        cross_seen[c1i-1] = True
+        print(cross_seen)
+        cross_seen[c1i] = True
 
         print(f"c: {c1} → {c2}, x: {x1} → {x2}, y: {y1} → {y2}")
 
-        get_path(path, cross_seen, x1, x2, y1, y2)
+        get_path(path, cross_seen, c1i, c2i, x1, x2, y1, y2)
 
+    return path, cross_x
 
 
 def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
@@ -151,7 +169,7 @@ def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
         # Remove the ` -- ` from the last coordinate, terminate the path, and
         # break the line
         drawing = drawing[:-4] + ";\n"
-    for cnum, x in x_vals:
+    for cnum, x in enumerate(x_vals):
         x = x_vals[cnum]
         drawing += f"\\node[circle, draw=black, inner sep=1pt] () at ({x}, 0) " + "{};\n"
         drawing += f"\\node[above left] () at ({x}, 0) " + "{\\small $" + str(int(cnum)) + "$};\n"
@@ -169,5 +187,7 @@ def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
     return out_str
 
 if __name__ == '__main__':
-    knot = gknot[(8, 4)]
-    build_stupid_graph(knot)
+    # knot = gknot[(8, 4)]
+    knot = gknot[(3, 1)]
+    path, cross_x = build_stupid_graph(knot)
+    draw_presentation([path], cross_x)
