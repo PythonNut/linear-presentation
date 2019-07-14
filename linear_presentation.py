@@ -85,22 +85,34 @@ def get_path(path, cross_seen, x1, x2, y1, y2):
 
 
 def build_stupid_graph(gcode):
+    # The total number of crossings (n) is going to be 1/2 the total length of
+    # the gauss code. We use integer divide to implicitly cast to an int so that
+    # we can put it into `range(n)` later.
     n = len(gcode)//2
+
+    # Initialize the drawing path, which is currently a list of tuples
+    # representing coordinates along the path that we are going to draw.
+    #
+    # The current form for these coordinates is (<x>, <y>, <o>), where o
+    # represents "orientation." That is, whether we're going through an over or
+    # under crossing here. It's likely that this information will prove
+    # superfluous, so we should remove it later. FIXME!
     path = [(-1, 0, None)]
+
+    # A list giving us the x coordinates at which each crossing will be drawn.
+    # Initially, we will make the drawing grid _way_ larger than it needs to be,
+    # to account for some edge cases where we need a lot of horizontal spacing.
+    #
+    # This occurs when we have performed some "backtracking" in the knot, i.e.
+    # when we encounter a crossing we've seen already before we've encountered
+    # all crossings in the diagram. E.g., in the knot (6,4).
     cross_x = [i*n for i in range(n)]
+
+    # Keep track of crossings we've seen already.
     cross_seen = [False for i in range(n)]
 
-    # if gcode[0] < 0:
-    #     # going under
-    #     path.append((0, 0, -1))
-
-    # else:
-    #     # going over
-    #     path.append((0, 0, +1))
-
-    # path.append((1, 0, None))
-
     for i in range(len(gcode) - 1):
+        # Get information from the gauss code
         c1, c2 = gcode[i], gcode[i+1]
         c1i = get_cnum(c1) - 1
         c2i = get_cnum(c2) - 1
