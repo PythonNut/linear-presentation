@@ -202,7 +202,6 @@ def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
     drawing = ""
     for path in draw_paths:
         drawing += "\\draw[-latex]"
-        # drawing += "\\draw"
         for vert in path:
             drawing += str(vert) + " -- "
         # Remove the ` -- ` from the last coordinate, terminate the path, and
@@ -212,6 +211,7 @@ def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
         x = x_vals[cnum]
         drawing += f"\\node[circle, draw=black, inner sep=1pt] () at ({x}, 0) " + "{};\n"
         drawing += f"\\node[above left] () at ({x}, 0) " + "{\\small $" + str(int(cnum+1)) + "$};\n"
+
     out_str = preamble + drawing + "\\end{tikzpicture}\n\\end{document}"
 
     # Need to chdir else pdflatex will pollute the parent directory with aux
@@ -227,7 +227,7 @@ def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
 
 if __name__ == '__main__':
     # knot = gknot[(8, 4)]
-    knot = gknot[(3, 1)]
-    # knot = gknot[(6,4)]
+    # knot = gknot[(3, 1)]
+    knot = gknot[(6,4)]
     path, cross_x = build_stupid_graph(knot)
     draw_presentation([path], cross_x)
