@@ -271,7 +271,7 @@ def draw_presentation(draw_paths, x_vals, signs, fname="test_gauss"):
 
     x_vals is
     """
-    break_width = 0.15
+    break_width = 0.4
 
     # Get the LaTeX preamble
     preamble = "\\documentclass[border=10pt]{standalone}\n"
@@ -281,7 +281,7 @@ def draw_presentation(draw_paths, x_vals, signs, fname="test_gauss"):
 
     drawing = ""
     for path in draw_paths:
-        drawing += "\\draw[-latex]"
+        drawing += "\\draw[-latex, line width=1mm]"
         for vert in path:
             drawing += str(vert) + " -- "
         # Remove the ` -- ` from the last coordinate, terminate the path, and
@@ -292,12 +292,12 @@ def draw_presentation(draw_paths, x_vals, signs, fname="test_gauss"):
         sign = signs[cnum]
         drawing += f"\\fill[white] ({x-break_width}, -{break_width}) rectangle ({x + break_width}, {break_width});\n"
         if sign < 0:
-            drawing += f"\\draw ({x}, {break_width}) -- ({x}, -{break_width});\n"
+            drawing += f"\\draw[line width=1mm] ({x}, {break_width}) -- ({x}, -{break_width});\n"
         else:
-            drawing += f"\\draw ({x-break_width}, 0) -- ({x+break_width}, 0);\n"
+            drawing += f"\\draw[line width=1mm] ({x-break_width}, 0) -- ({x+break_width}, 0);\n"
 
-        drawing += f"\\node[circle, fill=black, draw=black, inner sep=1pt] () at ({x}, 0) " + "{};\n"
-        drawing += f"\\node[above left] () at ({x}, 0) " + "{\\small $" + str(int(cnum+1)) + "$};\n"
+        drawing += f"\\node[circle, fill=black, draw=black, inner sep=3pt] () at ({x}, 0) " + "{};\n"
+        drawing += f"\\node[above left] () at ({x}, 0) " + "{\\large $" + str(int(cnum+1)) + "$};\n"
 
     out_str = preamble + drawing + "\\end{tikzpicture}\n\\end{document}"
 
