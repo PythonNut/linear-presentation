@@ -1,6 +1,7 @@
 import numpy as np
 from gauss_codes import gknot
 import os
+import copy
 
 def get_cnum(c):
     """
@@ -166,6 +167,9 @@ def build_stupid_graph(gcode):
     # Keep track of the places where we left gaps for the backtracking process
     gaps = []
 
+    gcode = copy.deepcopy(gcode)
+    gcode.append(gcode[0])
+
     for i in range(len(gcode) - 1):
         # Get information from the gauss code
         c1, c2 = gcode[i], gcode[i+1]
@@ -180,6 +184,11 @@ def build_stupid_graph(gcode):
         print(f"c: {c1} → {c2}, x: {x1} → {x2}, y: {y1} → {y2}")
 
         get_path(path, cross_x, cross_seen, gaps, c1i, c2i, x1, x2, y1, y2)
+
+    # fix the termination FIXME!
+    path[-2] = (-1, path[-2][1])
+    path[-1] = (-1, path[-1][1])
+    path.append((0, 0))
 
     return path, cross_x
 
