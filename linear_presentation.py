@@ -125,6 +125,7 @@ def get_envelope(c_shapes, x, y):
 
     return min_c
 
+
 def get_gap_x(c1, c2, l_gap_c, n):
     # In this case, we're entering _in_ through the gap, so we want to hug a
     # different side.
@@ -135,6 +136,19 @@ def get_gap_x(c1, c2, l_gap_c, n):
         x_shift = (l_gap_c - c1 + 1) // 2
 
     return (l_gap_c * (n + 3)) + 1 + x_shift
+
+
+def find_gap(cross_x, envelope):
+    assert envelope != None
+    _, ex2 = envelope
+
+    # stupid algorithm
+    for i, x in cross_x:
+        if x > ex2:
+            return i
+
+    assert False
+
 
 def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
     n = len(cross_x)
