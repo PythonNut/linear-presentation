@@ -122,7 +122,7 @@ def get_envelope(c_shapes, x, y):
 
     return min_c
 
-def get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2):
+def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
     n = len(cross_x)
     c_shapes = get_c_shapes(path)
     delta = abs(c2i - c1i)
@@ -135,24 +135,31 @@ def get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2):
             e1 = get_envelope(c_shapes, x1, y1)
             e2 = get_envelope(c_shapes, x2, y2)
             if e1 == e2:
-                # base case
+                # base case, they share the same envelope and are on
+                # the same side, so we know that we can just connect
+                # them directly.
                 add_c_shape(path, x1, x2, y1)
             else:
                 print('oh no1')
 
     else:
         if y1 == 0:
+            # We are coming out of the first crossing horizontally
             path.append((x1 + 1, 0))
             e1 = get_envelope(c_shapes, x1, y2)
             e2 = get_envelope(c_shapes, x2, y2)
             if e1 == e2:
                 # base case
                 add_c_shape(path, x1+1, x2, y2)
+
             else:
-                print('oh no2')
 
         elif y2 == 0:
-            # # We want to go into the second crossing horizontally
+            # We want to go into the second crossing horizontally
+
+            # We go just short of the path, then we go in.
+            # Importantly, there is no restriction on which direction
+            # we can approach the main line from.
             e1 = get_envelope(c_shapes, x1, y1)
             e2 = get_envelope(c_shapes, x2 - 1, y1)
             if e1 == e2:
@@ -164,15 +171,29 @@ def get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2):
                 print('oh no3')
 
         else:
+            # We must exit and approach from different sides, so we
+            # must cross the main line at some point. The envelopes
+            # cannot be equal unless they are both the None (aka.
+            # largest) envelope.
+
             e1 = get_envelope(c_shapes, x1, y1)
             e2 = get_envelope(c_shapes, x2, y2)
+
             if e1 == e2 == None:
+                # If both are "open to the air", we can go to the
+                # right or left, we choose to go to the right for
+                # aesthetic reasons. There can be no more than min(n -
+                # c1i, n - c2i) other paths that must go around the
+                # right, and we add 1 to make room for the horizontal
+                # exit from the last crossing.
+
                 x_psuedo = cross_x[-1] + 1 + min(n - c1i, n - c2i)
                 add_c_shape(path, x1, x_psuedo, y1)
                 add_c_shape(path, x_psuedo, x2, y2)
             else:
-                print("oh no4")
+                # The exit and approach are on opposite sides and at least one has an containing envelope.
 
+                print("oh no4")
 
 def build_stupid_graph(gcode):
     # The total number of crossings (n) is going to be 1/2 the total length of
@@ -198,9 +219,6 @@ def build_stupid_graph(gcode):
     # Keep track of crossings we've seen already.
     cross_seen = [False for i in range(n)]
 
-    # Keep track of the places where we left gaps for the backtracking process
-    gaps = []
-
     for i in range(len(gcode) - 1):
         # Get information from the gauss code
         c1, c2 = gcode[i], gcode[i+1]
@@ -215,12 +233,13 @@ def build_stupid_graph(gcode):
 
         print(f"c: {c1} → {c2}, x: {x1} → {x2}, y: {y1} → {y2}")
 
-        get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2)
+        get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2)
 
     # fix the termination FIXME!
     x1, _ = path[-1]
     y1 = -1 * get_y_in(True, gcode[-1])
-    get_path(path, cross_x, gaps, 0, 0, x1, 0, y1, 0)
+    print(f"c: {gcode[-1]} → {gcode[0]}, x: {x1} → {0}, y: {y1} → {0}")
+    get_path(path, cross_x, 0, 0, x1, 0, y1, 0)
 
     signs = []
     for cnum in range(1,n):
