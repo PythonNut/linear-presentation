@@ -178,7 +178,7 @@ def build_stupid_graph(gcode):
         x1, x2 = cross_x[c1i], cross_x[c2i]
         y1 = get_y_in(cross_seen[c1i], c1)
         y2 = -1 * get_y_in(cross_seen[c2i], c2)
-        print(cross_seen)
+        # print(cross_seen)
         cross_seen[c1i] = True
 
         print(f"c: {c1} → {c2}, x: {x1} → {x2}, y: {y1} → {y2}")
@@ -190,10 +190,16 @@ def build_stupid_graph(gcode):
     path[-1] = (-1, path[-1][1])
     path.append((0, 0))
 
-    return path, cross_x
+    signs = []
+    for cnum in range(1,n):
+        for c in gcode:
+            if get_cnum(c) == cnum:
+                signs.append((c/abs(c)))
+
+    return path, cross_x, signs
 
 
-def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
+def draw_presentation(draw_paths, x_vals, signs, fname="test_gauss"):
     """
     draw
 
@@ -202,6 +208,8 @@ def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
 
     x_vals is
     """
+    break_width = 0.15
+
     # Get the LaTeX preamble
     preamble = "\\documentclass[border=10pt]{standalone}\n"
     preamble += "\\usepackage{tikz}\n"
@@ -218,7 +226,14 @@ def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
         drawing = drawing[:-4] + ";\n"
     for cnum, x in enumerate(x_vals):
         x = x_vals[cnum]
-        drawing += f"\\node[circle, draw=black, inner sep=1pt] () at ({x}, 0) " + "{};\n"
+        sign = signs[cnum]
+        drawing += f"\\fill[white] ({x-break_width}, -{break_width}) rectangle ({x + break_width}, {break_width});\n"
+        if sign < 0:
+            drawing += f"\\draw ({x}, {break_width}) -- ({x}, -{break_width});\n"
+        else:
+            drawing += f"\\draw ({x-break_width}, 0) -- ({x+break_width}, 0);\n"
+
+        drawing += f"\\node[circle, fill=black, draw=black, inner sep=1pt] () at ({x}, 0) " + "{};\n"
         drawing += f"\\node[above left] () at ({x}, 0) " + "{\\small $" + str(int(cnum+1)) + "$};\n"
 
     out_str = preamble + drawing + "\\end{tikzpicture}\n\\end{document}"
@@ -235,8 +250,10 @@ def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
     return out_str
 
 if __name__ == '__main__':
+    knot = gknot[(6,5)]
     # knot = gknot[(8, 4)]
     # knot = gknot[(3, 1)]
-    knot = gknot[(6,4)]
-    path, cross_x = build_stupid_graph(knot)
-    draw_presentation([path], cross_x)
+    # knot = gknot[(6,4)]
+    # knot = gknot[(11,2)]
+    path, cross_x, signs = build_stupid_graph(knot)
+    draw_presentation([path], cross_x, signs)
