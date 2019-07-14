@@ -122,6 +122,17 @@ def get_envelope(c_shapes, x, y):
 
     return min_c
 
+def find_gap(cross_x, envelope):
+    assert envelope != None
+    _, ex2 = envelope
+
+    # stupid algorithm
+    for i, x in cross_x:
+        if x > ex2:
+            return i
+
+    assert False
+
 def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
     n = len(cross_x)
     c_shapes = get_c_shapes(path)
