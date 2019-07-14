@@ -117,7 +117,7 @@ def get_envelope(c_shapes, x, y):
 
     return min_c
 
-def get_path(path, cross_x, cross_seen, gaps, c1i, c2i, x1, x2, y1, y2):
+def get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2):
     c_shapes = get_c_shapes(path)
     delta = abs(c2i - c1i)
     if y1 == y2:
@@ -322,5 +322,5 @@ if __name__ == '__main__':
     pathological_test = [
         -1.5, 2, -3, 4.5, -5.5, 3, -6, 1.5, 7, 5.5, -4.5, 6, -2, -7
     ]
-    cross_x, signs = build_stupid_graph(knot)
+    path, cross_x, signs = build_stupid_graph(knot)
     draw_presentation([path], cross_x, signs)
