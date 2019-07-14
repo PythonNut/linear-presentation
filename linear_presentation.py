@@ -117,7 +117,7 @@ def get_envelope(c_shapes, x, y):
 
     return min_c
 
-def get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2):
+def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
     n = len(cross_x)
     c_shapes = get_c_shapes(path)
     delta = abs(c2i - c1i)
@@ -236,9 +236,6 @@ def build_stupid_graph(gcode):
     # Keep track of crossings we've seen already.
     cross_seen = [False for i in range(n)]
 
-    # Keep track of the places where we left gaps for the backtracking process
-    gaps = []
-
     for i in range(len(gcode) - 1):
         # Get information from the gauss code
         c1, c2 = gcode[i], gcode[i+1]
@@ -253,12 +250,13 @@ def build_stupid_graph(gcode):
 
         print(f"c: {c1} → {c2}, x: {x1} → {x2}, y: {y1} → {y2}")
 
-        get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2)
+        get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2)
 
     # fix the termination FIXME!
     x1, _ = path[-1]
     y1 = -1 * get_y_in(True, gcode[-1])
-    get_path(path, cross_x, gaps, 0, 0, x1, 0, y1, 0)
+    print(f"c: {gcode[-1]} → {gcode[0]}, x: {x1} → {0}, y: {y1} → {0}")
+    get_path(path, cross_x, 0, 0, x1, 0, y1, 0)
 
     signs = []
     for cnum in range(1,n):
