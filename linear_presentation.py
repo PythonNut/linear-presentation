@@ -81,7 +81,7 @@ def get_y_in(cross_seen, c2):
 
     return c2_y
 
-def get_path(path, cross_x, cross_seen, gaps, c1i, c2i, x1, x2, y1, y2):
+def get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2):
     delta = abs(c2i - c1i)
     if y1 == y2:
         if y1 == 0:
@@ -122,14 +122,32 @@ def get_path(path, cross_x, cross_seen, gaps, c1i, c2i, x1, x2, y1, y2):
             y = y1 * (delta//2 + 1)
             path.append((x1, y))
 
+            n = len(cross_x)
+
             print(y1, y2)
             if x1 < x2:
                 possible_gaps = list(filter(lambda x: x1 <= x and x <= x2, gaps))
-                cross_gap = max(possible_gaps)
 
+                # if not possible_gaps:
+                #     num_right = n - max(c1i, c2i)
+                #     num_left = min(c1i, c2i)
+
+
+                cross_gap = max(possible_gaps)
                 x_gap = cross_x[cross_gap] - delta
+
+
+
             else:
                 possible_gaps = list(filter(lambda x: x2 <= x and x <= x1, gaps))
+
+                # if not possible_gaps:
+                #     num_right = n - max(c1i, c2i)
+                #     num_left = (c1i + c2i) // 2
+
+                #     if num_right < num_left:
+
+
                 cross_gap = min(possible_gaps)
                 x_gap = cross_x[cross_gap] + delta
 
@@ -183,7 +201,7 @@ def build_stupid_graph(gcode):
 
         print(f"c: {c1} → {c2}, x: {x1} → {x2}, y: {y1} → {y2}")
 
-        get_path(path, cross_x, cross_seen, gaps, c1i, c2i, x1, x2, y1, y2)
+        get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2)
 
     # fix the termination FIXME!
     path[-2] = (-1, path[-2][1])
@@ -250,10 +268,14 @@ def draw_presentation(draw_paths, x_vals, signs, fname="test_gauss"):
     return out_str
 
 if __name__ == '__main__':
-    knot = gknot[(6,5)]
+    # knot = gknot[(6,5)]
     # knot = gknot[(8, 4)]
     # knot = gknot[(3, 1)]
     # knot = gknot[(6,4)]
     # knot = gknot[(11,2)]
-    path, cross_x, signs = build_stupid_graph(knot)
+    # knot = gknot[(5,2)]
+    pathological_test = [
+        -1.5, 2, -3, 4.5, -5.5, 3, -6, 1.5, 7, 5.5, -4.5, 6, -2, -7
+    ]
+    cross_x, signs = build_stupid_graph(knot)
     draw_presentation([path], cross_x, signs)
