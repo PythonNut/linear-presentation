@@ -24,7 +24,7 @@ def get_cnum(c):
 
     return int(abs(c))
 
-def get_c2_y(cross_seen, c2):
+def get_y_in(cross_seen, c2):
     if not cross_seen:
         return 0
 
@@ -80,7 +80,7 @@ def get_c2_y(cross_seen, c2):
 
     return c2_y
 
-def get_path(path, cross_seen, c1i, c2i, x1, x2, y1, y2):
+def get_path(path, cross_x, cross_seen, gaps, c1i, c2i, x1, x2, y1, y2):
     delta = abs(c2i - c1i)
     if y1 == y2:
         if y1 == 0:
@@ -88,7 +88,7 @@ def get_path(path, cross_seen, c1i, c2i, x1, x2, y1, y2):
             path.append((x2, y2))
 
         else:
-            y = y1 * (delta+1)//2
+            y = y1 * (delta//2 + 1)
             path.append((x1, y))
             path.append((x2, y))
             path.append((x2, 0))
@@ -96,8 +96,44 @@ def get_path(path, cross_seen, c1i, c2i, x1, x2, y1, y2):
     else:
         if y1 == 0:
             path.append((x1 + 1, y1))
-            y = y1 * (delta+1)//2
+            y = y2 * (delta//2 + 1)
             path.append((x1 + 1, y))
+            path.append((x2, y))
+            path.append((x2, 0))
+
+        elif y2 == 0:
+            path.append((x1, y1))
+            y = y1 * (delta//2 + 1)
+            path.append((x1, y))
+
+            # We want to go into the second crossing horizontally
+            x = cross_x[c2i] - 1
+            path.append((x, y))
+            path.append((x,0))
+            path.append((x+1,0))
+
+            gaps.append(c2i)
+            # path.append((x2, y))
+            # path.append((x2, 0))
+
+        else:
+            path.append((x1, y1))
+            y = y1 * (delta//2 + 1)
+            path.append((x1, y))
+
+            print(y1, y2)
+            if x1 < x2:
+                possible_gaps = list(filter(lambda x: x1 <= x and x <= x2, gaps))
+                cross_gap = max(possible_gaps)
+
+                x_gap = cross_x[cross_gap] - delta
+            else:
+                possible_gaps = list(filter(lambda x: x2 <= x and x <= x1, gaps))
+                cross_gap = min(possible_gaps)
+                x_gap = cross_x[cross_gap] + delta
+
+            path.append((x_gap, y))
+            path.append((x_gap, -1 * y))
             path.append((x2, y))
             path.append((x2, 0))
 
@@ -127,20 +163,23 @@ def build_stupid_graph(gcode):
     # Keep track of crossings we've seen already.
     cross_seen = [False for i in range(n)]
 
+    # Keep track of the places where we left gaps for the backtracking process
+    gaps = []
+
     for i in range(len(gcode) - 1):
         # Get information from the gauss code
         c1, c2 = gcode[i], gcode[i+1]
         c1i = get_cnum(c1) - 1
         c2i = get_cnum(c2) - 1
         x1, x2 = cross_x[c1i], cross_x[c2i]
-        y1 = get_c2_y(cross_seen[c1i], c1)
-        y2 = get_c2_y(cross_seen[c2i], c2)
+        y1 = get_y_in(cross_seen[c1i], c1)
+        y2 = -1 * get_y_in(cross_seen[c2i], c2)
         print(cross_seen)
         cross_seen[c1i] = True
 
         print(f"c: {c1} → {c2}, x: {x1} → {x2}, y: {y1} → {y2}")
 
-        get_path(path, cross_seen, c1i, c2i, x1, x2, y1, y2)
+        get_path(path, cross_x, cross_seen, gaps, c1i, c2i, x1, x2, y1, y2)
 
     return path, cross_x
 
@@ -172,7 +211,7 @@ def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
     for cnum, x in enumerate(x_vals):
         x = x_vals[cnum]
         drawing += f"\\node[circle, draw=black, inner sep=1pt] () at ({x}, 0) " + "{};\n"
-        drawing += f"\\node[above left] () at ({x}, 0) " + "{\\small $" + str(int(cnum)) + "$};\n"
+        drawing += f"\\node[above left] () at ({x}, 0) " + "{\\small $" + str(int(cnum+1)) + "$};\n"
     out_str = preamble + drawing + "\\end{tikzpicture}\n\\end{document}"
 
     # Need to chdir else pdflatex will pollute the parent directory with aux
@@ -189,5 +228,6 @@ def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
 if __name__ == '__main__':
     # knot = gknot[(8, 4)]
     knot = gknot[(3, 1)]
+    # knot = gknot[(6,4)]
     path, cross_x = build_stupid_graph(knot)
     draw_presentation([path], cross_x)
