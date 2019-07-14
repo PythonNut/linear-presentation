@@ -118,6 +118,7 @@ def get_envelope(c_shapes, x, y):
     return min_c
 
 def get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2):
+    n = len(cross_x)
     c_shapes = get_c_shapes(path)
     delta = abs(c2i - c1i)
     if y1 == y2:
@@ -180,7 +181,15 @@ def get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2):
             # path.append((x2, 0))
 
         else:
-            print("oh no4")
+            e1 = get_envelope(c_shapes, x1, y1)
+            e2 = get_envelope(c_shapes, x2, y2)
+            if e1 == e2 == None:
+                x_psuedo = cross_x[-1] + 1 + min(n - c1i, n - c2i)
+                add_c_shape(path, x1, x_psuedo, y1)
+                add_c_shape(path, x_psuedo, x2, y2)
+            else:
+                print("oh no4")
+
             # path.append((x1, y1))
             # y = y1 * (delta//2 + 1)
             # path.append((x1, y))
@@ -222,16 +231,13 @@ def build_stupid_graph(gcode):
     # This occurs when we have performed some "backtracking" in the knot, i.e.
     # when we encounter a crossing we've seen already before we've encountered
     # all crossings in the diagram. E.g., in the knot (6,4).
-    cross_x = [i*n for i in range(n)]
+    cross_x = [i*(n+3) for i in range(n)]
 
     # Keep track of crossings we've seen already.
     cross_seen = [False for i in range(n)]
 
     # Keep track of the places where we left gaps for the backtracking process
     gaps = []
-
-    gcode = copy.deepcopy(gcode)
-    gcode.append(gcode[0])
 
     for i in range(len(gcode) - 1):
         # Get information from the gauss code
@@ -243,7 +249,6 @@ def build_stupid_graph(gcode):
         # y_out is -1 * y_in
         y1 = -1 * get_y_in(cross_seen[c1i], c1)
         y2 = get_y_in(cross_seen[c2i], c2)
-        # print(cross_seen)
         cross_seen[c1i] = True
 
         print(f"c: {c1} → {c2}, x: {x1} → {x2}, y: {y1} → {y2}")
@@ -251,9 +256,9 @@ def build_stupid_graph(gcode):
         get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2)
 
     # fix the termination FIXME!
-    path[-2] = (-1, path[-2][1])
-    path[-1] = (-1, path[-1][1])
-    path.append((0, 0))
+    x1, _ = path[-1]
+    y1 = -1 * get_y_in(True, gcode[-1])
+    get_path(path, cross_x, gaps, 0, 0, x1, 0, y1, 0)
 
     signs = []
     for cnum in range(1,n):
