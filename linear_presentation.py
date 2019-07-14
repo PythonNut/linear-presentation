@@ -1,6 +1,6 @@
 import numpy as np
 from gauss_codes import gknot
-
+import os
 
 def get_cnum(c):
     """
@@ -130,8 +130,6 @@ def draw_presentation(draw_paths, x_vals, fname="test_gauss"):
     preamble += "\\usepackage{tikz}\n"
     preamble += "\\begin{document}\n"
     preamble += "\\begin{tikzpicture}\n"
-
-
 
     drawing = ""
     for path in draw_paths:
