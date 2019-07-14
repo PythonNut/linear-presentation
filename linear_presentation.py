@@ -130,38 +130,33 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
             e1 = get_envelope(c_shapes, x1, y1)
             e2 = get_envelope(c_shapes, x2, y2)
             if e1 == e2:
-                # base case
+                # base case, they share the same envelope and are on
+                # the same side, so we know that we can just connect
+                # them directly.
                 add_c_shape(path, x1, x2, y1)
             else:
                 print('oh no1')
-            # y = y1 * (delta//2 + 1)
-            # path.append((x1, y))
-            # path.append((x2, y))
-            # path.append((x2, 0))
 
     else:
         if y1 == 0:
+            # We are coming out of the first crossing horizontally
             path.append((x1 + 1, 0))
             e1 = get_envelope(c_shapes, x1, y2)
             e2 = get_envelope(c_shapes, x2, y2)
             if e1 == e2:
                 # base case
                 add_c_shape(path, x1+1, x2, y2)
+
             else:
+
                 print('oh no2')
 
-            # y = y2 * (delta//2 + 1)
-            # add_c_shape(path, x1 + 1, x2, y2)
-            # path.append((x1 + 1, y))
-            # path.append((x2, y))
-            # path.append((x2, 0))
-
         elif y2 == 0:
-            # path.append((x1, y1))
-            # y = y1 * (delta//2 + 1)
-            # path.append((x1, y))
+            # We want to go into the second crossing horizontally
 
-            # # We want to go into the second crossing horizontally
+            # We go just short of the path, then we go in.
+            # Importantly, there is no restriction on which direction
+            # we can approach the main line from.
             e1 = get_envelope(c_shapes, x1, y1)
             e2 = get_envelope(c_shapes, x2 - 1, y1)
             if e1 == e2:
@@ -172,43 +167,31 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
             else:
                 print('oh no3')
 
-            # path.append((x, y))
-            # path.append((x,0))
-            # path.append((x+1,0))
-
-            # gaps.append(c2i)
-            # path.append((x2, y))
-            # path.append((x2, 0))
-
         else:
+            # We must exit and approach from different sides, so we
+            # must cross the main line at some point. The envelopes
+            # cannot be equal unless they are both the None (aka.
+            # largest) envelope.
+
             e1 = get_envelope(c_shapes, x1, y1)
             e2 = get_envelope(c_shapes, x2, y2)
+
             if e1 == e2 == None:
+                # If both are "open to the air", we can go to the
+                # right or left, we choose to go to the right for
+                # aesthetic reasons. There can be no more than min(n -
+                # c1i, n - c2i) other paths that must go around the
+                # right, and we add 1 to make room for the horizontal
+                # exit from the last crossing.
+
                 x_psuedo = cross_x[-1] + 1 + min(n - c1i, n - c2i)
                 add_c_shape(path, x1, x_psuedo, y1)
                 add_c_shape(path, x_psuedo, x2, y2)
+
             else:
+                # The exit and approach are on opposite sides and at least one has an containing envelope.
+
                 print("oh no4")
-
-            # path.append((x1, y1))
-            # y = y1 * (delta//2 + 1)
-            # path.append((x1, y))
-
-            # print(y1, y2)
-            # if x1 < x2:
-            #     possible_gaps = list(filter(lambda x: x1 <= x and x <= x2, gaps))
-            #     cross_gap = max(possible_gaps)
-
-            #     x_gap = cross_x[cross_gap] - delta
-            # else:
-            #     possible_gaps = list(filter(lambda x: x2 <= x and x <= x1, gaps))
-            #     cross_gap = min(possible_gaps)
-            #     x_gap = cross_x[cross_gap] + delta
-
-            # path.append((x_gap, y))
-            # path.append((x_gap, -1 * y))
-            # path.append((x2, y))
-            # path.append((x2, 0))
 
 
 
