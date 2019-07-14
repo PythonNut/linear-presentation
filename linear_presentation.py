@@ -32,12 +32,12 @@ def get_cnum(c):
 
     return int(abs(c))
 
-def get_y_in(cross_seen, c2):
+def get_y_in(cross_seen, c):
     if not cross_seen:
         return 0
 
-    if c2 < 0:
-        if c2 % 1 != 0:
+    if c < 0:
+        if c % 1 != 0:
             # vertical understrand, negative crossing
             #
             #      y
@@ -48,7 +48,7 @@ def get_y_in(cross_seen, c2):
             #      |
             #      v
             #
-            c2_y = 1
+            c_y = 1
         else:
             # vertical understrand, positive crossing
             #
@@ -59,9 +59,9 @@ def get_y_in(cross_seen, c2):
             #
             #      |
             #      y
-            c2_y = -1
+            c_y = -1
     else:
-        if c2 % 1 != 0:
+        if c % 1 != 0:
             # vertical overstrand, negative crossing
             #
             #      ^
@@ -72,7 +72,7 @@ def get_y_in(cross_seen, c2):
             #      |
             #      y
             #
-            c2_y = -1
+            c_y = -1
         else:
             # vertical overstrand, positive crossing
             #
@@ -84,9 +84,9 @@ def get_y_in(cross_seen, c2):
             #      |
             #      v
             #
-            c2_y = 1
+            c_y = 1
 
-    return c2_y
+    return c_y
 
 def add_c_shape(path, x1, x2, y_sign):
     y = y_sign * abs(x2 - x1)
@@ -239,8 +239,10 @@ def build_stupid_graph(gcode):
         c1i = get_cnum(c1) - 1
         c2i = get_cnum(c2) - 1
         x1, x2 = cross_x[c1i], cross_x[c2i]
-        y1 = get_y_in(cross_seen[c1i], c1)
-        y2 = -1 * get_y_in(cross_seen[c2i], c2)
+
+        # y_out is -1 * y_in
+        y1 = -1 * get_y_in(cross_seen[c1i], c1)
+        y2 = get_y_in(cross_seen[c2i], c2)
         # print(cross_seen)
         cross_seen[c1i] = True
 
@@ -319,11 +321,12 @@ if __name__ == '__main__':
     # knot = gknot[(6,4)]
     # knot = gknot[(11,2)]
     # knot = gknot[(5,2)]
-    # path, cross_x, signs = build_stupid_graph(knot)
+    knot = gknot[(4,1)]
+    path, cross_x, signs = build_stupid_graph(knot)
 
-    pathological_test = [
-        -1.5, 2, -3, 4.5, -5.5, 3, -6, 1.5, 7, 5.5, -4.5, 6, -2, -7
-    ]
-    path, cross_x, signs = build_stupid_graph(pathological_test)
+    # pathological_test = [
+    #     -1.5, 2, -3, 4.5, -5.5, 3, -6, 1.5, 7, 5.5, -4.5, 6, -2, -7
+    # ]
+    # path, cross_x, signs = build_stupid_graph(pathological_test)
 
     draw_presentation([path], cross_x, signs)
