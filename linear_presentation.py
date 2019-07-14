@@ -3,6 +3,13 @@ from gauss_codes import gknot
 import os
 import copy
 
+def sign(i):
+    if i > 0:
+        return 1
+    elif i < 0:
+        return -1
+    return 0
+
 def get_cnum(c):
     """
     Crossings in our gauss code are formatted like
@@ -81,7 +88,37 @@ def get_y_in(cross_seen, c2):
 
     return c2_y
 
-def get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2):
+def add_c_shape(path, x1, x2, y_sign):
+    y = y_sign * abs(x2 - x1)
+    path.append((x1, y))
+    path.append((x2, y))
+    path.append((x2, 0))
+
+def get_c_shapes(path):
+    intervals = []
+    for p1, p2 in zip(path, path[1:]):
+       (p1x, p1y), (p2x, p2y) = p1, p2
+       if p1y == p2y:
+           intervals.append((min(p1x, p2x), max(p1x, p2x), sign(p1y)))
+
+    return intervals
+
+def get_envelope(c_shapes, x, y):
+    y = sign(y)
+    assert y != 0
+    min_size, min_c = float('inf'), None
+    for (cx1, cx2, cy) in c_shapes:
+        if cy == y and cx1 < x and x < cx2:
+            size = cx2 - cx1
+            assert size != min_size
+            if size < min_size:
+                min_size = size
+                min_c = (cx1, cx2)
+
+    return min_c
+
+def get_path(path, cross_x, cross_seen, gaps, c1i, c2i, x1, x2, y1, y2):
+    c_shapes = get_c_shapes(path)
     delta = abs(c2i - c1i)
     if y1 == y2:
         if y1 == 0:
@@ -89,72 +126,80 @@ def get_path(path, cross_x, gaps, c1i, c2i, x1, x2, y1, y2):
             path.append((x2, y2))
 
         else:
-            y = y1 * (delta//2 + 1)
-            path.append((x1, y))
-            path.append((x2, y))
-            path.append((x2, 0))
+            e1 = get_envelope(c_shapes, x1, y1)
+            e2 = get_envelope(c_shapes, x2, y2)
+            if e1 == e2:
+                # base case
+                add_c_shape(path, x1, x2, y1)
+            else:
+                print('oh no1')
+            # y = y1 * (delta//2 + 1)
+            # path.append((x1, y))
+            # path.append((x2, y))
+            # path.append((x2, 0))
 
     else:
         if y1 == 0:
-            path.append((x1 + 1, y1))
-            y = y2 * (delta//2 + 1)
-            path.append((x1 + 1, y))
-            path.append((x2, y))
-            path.append((x2, 0))
+            path.append((x1 + 1, 0))
+            e1 = get_envelope(c_shapes, x1, y2)
+            e2 = get_envelope(c_shapes, x2, y2)
+            if e1 == e2:
+                # base case
+                add_c_shape(path, x1+1, x2, y2)
+            else:
+                print('oh no2')
+
+            # y = y2 * (delta//2 + 1)
+            # add_c_shape(path, x1 + 1, x2, y2)
+            # path.append((x1 + 1, y))
+            # path.append((x2, y))
+            # path.append((x2, 0))
 
         elif y2 == 0:
-            path.append((x1, y1))
-            y = y1 * (delta//2 + 1)
-            path.append((x1, y))
+            # path.append((x1, y1))
+            # y = y1 * (delta//2 + 1)
+            # path.append((x1, y))
 
-            # We want to go into the second crossing horizontally
-            x = cross_x[c2i] - 1
-            path.append((x, y))
-            path.append((x,0))
-            path.append((x+1,0))
+            # # We want to go into the second crossing horizontally
+            e1 = get_envelope(c_shapes, x1, y1)
+            e2 = get_envelope(c_shapes, x2 - 1, y1)
+            if e1 == e2:
+                # base case
+                add_c_shape(path, x1, x2 - 1, y1)
+                path.append((x2, y2))
 
-            gaps.append(c2i)
+            else:
+                print('oh no3')
+
+            # path.append((x, y))
+            # path.append((x,0))
+            # path.append((x+1,0))
+
+            # gaps.append(c2i)
             # path.append((x2, y))
             # path.append((x2, 0))
 
         else:
-            path.append((x1, y1))
-            y = y1 * (delta//2 + 1)
-            path.append((x1, y))
+            print("oh no4")
+            # path.append((x1, y1))
+            # y = y1 * (delta//2 + 1)
+            # path.append((x1, y))
 
-            n = len(cross_x)
+            # print(y1, y2)
+            # if x1 < x2:
+            #     possible_gaps = list(filter(lambda x: x1 <= x and x <= x2, gaps))
+            #     cross_gap = max(possible_gaps)
 
-            print(y1, y2)
-            if x1 < x2:
-                possible_gaps = list(filter(lambda x: x1 <= x and x <= x2, gaps))
+            #     x_gap = cross_x[cross_gap] - delta
+            # else:
+            #     possible_gaps = list(filter(lambda x: x2 <= x and x <= x1, gaps))
+            #     cross_gap = min(possible_gaps)
+            #     x_gap = cross_x[cross_gap] + delta
 
-                # if not possible_gaps:
-                #     num_right = n - max(c1i, c2i)
-                #     num_left = min(c1i, c2i)
-
-
-                cross_gap = max(possible_gaps)
-                x_gap = cross_x[cross_gap] - delta
-
-
-
-            else:
-                possible_gaps = list(filter(lambda x: x2 <= x and x <= x1, gaps))
-
-                # if not possible_gaps:
-                #     num_right = n - max(c1i, c2i)
-                #     num_left = (c1i + c2i) // 2
-
-                #     if num_right < num_left:
-
-
-                cross_gap = min(possible_gaps)
-                x_gap = cross_x[cross_gap] + delta
-
-            path.append((x_gap, y))
-            path.append((x_gap, -1 * y))
-            path.append((x2, y))
-            path.append((x2, 0))
+            # path.append((x_gap, y))
+            # path.append((x_gap, -1 * y))
+            # path.append((x2, y))
+            # path.append((x2, 0))
 
 
 
