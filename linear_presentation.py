@@ -144,6 +144,8 @@ def get_gap_x(c1, c2, n):
     if c1 < c2:
         # exiting
         return c2 * (n + 3) - 2 - c1
+    else:
+        return c2 * (n + 3) + 1 + n - c1
 
 def find_gap(cross_x, envelope):
     print(envelope)
