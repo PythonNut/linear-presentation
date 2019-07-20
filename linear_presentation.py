@@ -399,10 +399,15 @@ def build_stupid_graph(gcode):
     get_path(path, cross_x, 0, 0, x1, 0, y1, 0)
 
     signs = []
-    for cnum in range(1,n):
+    for cnum in range(1,n+1):
+        # This is gross
         for c in gcode:
+            stop = False
             if get_cnum(c) == cnum:
                 signs.append((c/abs(c)))
+                stop = True
+            if stop:
+                break
 
     return path, cross_x, signs
 
