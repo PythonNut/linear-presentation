@@ -2,6 +2,9 @@ import numpy as np
 from gauss_codes import gknot
 import os
 import copy
+from collections import defaultdict
+import itertools as it
+import random
 
 def sign(i):
     if i > 0:
@@ -143,7 +146,7 @@ def get_gap_x(c1, c2, n):
     assert c1 != c2
     if c1 < c2:
         # exiting
-        return c2 * (n + 3) - 2 - c1
+        return c2 * 3 - 2
     else:
         # Suspect this never actually occurs
         return c2 * (n + 3) + 1 + n - c1
@@ -186,7 +189,7 @@ def escape(c_shapes, cross_x, x, y):
 
     if check_gap(c_shapes, cross_x, gapi):
         # calculate c1 from x and c2 from gap
-        c1 = x//(n + 3)
+        c1 = x//3
         c2 = gapi
         x2 = get_gap_x(c1, c2, n)
         return [(*e, x2)] + escape(c_shapes, cross_x, x2, -y)
@@ -202,7 +205,7 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
         if y1 == 0:
             # CASE 0
             # easy
-            path.append((x2, y2))
+            path.append((x2, 0))
 
         else:
             # CASE 1
@@ -303,7 +306,7 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
 
                 print('oh no3')
 
-            path.append((x2, y2))
+            path.append((x2, 0))
 
         else:
             # CASE 4
@@ -350,6 +353,99 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
                     get_path(path, cross_x, c1i, find_gap(cross_x, (0, x_psuedo)), x1, x_psuedo, y1, -y2)
                     add_c_shape(path, x_psuedo, x2, y2)
 
+def find_x_conflicts(bad_path, n):
+    # First, get rid of duplicate points in the path
+    path = [bad_path[0]]
+    for p in bad_path:
+        if path[-1] != p:
+            path.append(p)
+
+    x_lookup = defaultdict(lambda: [])
+    for p0, p1, p2, p3, p4 in zip(path, path[1:], path[2:], path[3:], path[4:]):
+        assert p0 != p1
+        (p1x, p1y), (p2x, p2y), (p3x, p3y) = p1, p2, p3
+        if not (p1x == p2x == p3x): continue
+        # We're going across the main line
+        # we know the segment is vertical
+
+        # TODO: prove we can't get a conflict at a crossing
+        if p1x%3 == 0: continue
+        (p0x, p0y), (p4x, p4y) = p0, p4
+
+        assert p0x != p1x
+        assert p4x != p3x
+        assert p0y == p1y
+        assert p4y == p3y
+
+        # we know the end segments are horizontal
+        d0 = -1 if p0x < p1x else 1
+        d4 = -1 if p4x < p3x else 1
+
+        x_lookup[p1x].append(
+            (p1y, p3y, d0, d4)
+            # (p0, p1, p2, p3, p4)
+        )
+
+    import pprint
+    pprint.pprint(dict(x_lookup.items()))
+
+    nudge_map = {}
+    for x, shapes in x_lookup.items():
+        for p in it.permutations(shapes):
+            fail = False
+            for p1, p2 in zip(p, p[1:]):
+                p1y1, p1y2, d1x1, d1x2 = p1
+                p2y1, p2y2, d2x1, d2x2 = p2
+
+                # Orient the flips
+                if p1y1 > p1y2:
+                    p1y1, p1y2 = p1y2, p1y1
+                    d1x1, d1x2 = d1x2, d1x1
+
+                if p2y1 > p2y2:
+                    p2y1, p2y2 = p2y2, p2y1
+                    d2x1, d2x2 = d2x2, d2x1
+
+                # Detect crosses
+                if p1y1 > p2y1 and d1x1 == 1: # p1y1 above p2y1 crosses it forward
+                    break
+                if p1y1 < p2y1 and d2x1 == -1: # p2y1 above p1y1 cross it backward
+                    break
+
+                if p1y2 < p2y2 and d1x2 == 1: # p1y2 below p2y2 crosses it forward
+                    break
+                if p1y2 > p2y2 and d2x2 == -1: # p2y2 below p1y2 cross it backward
+                    break
+            else:
+                # this ordering is valid
+                break
+        else:
+            assert False
+
+        for i, shape in enumerate(p):
+            nudge_map[shape[:2]] = (i+1)/(len(p) + 1)
+
+    print(nudge_map)
+
+    for i in range(len(path) - 4):
+        p0, p1, p2, p3, p4 = path[i:i+5]
+        (p1x, p1y), (p2x, p2y), (p3x, p3y) = p1, p2, p3
+        if not (p1x == p2x == p3x): continue
+        if not p2y == 0: continue
+        # rounding is a horrible hack
+        if (round(p1y), round(p3y)) in nudge_map:
+            dx = nudge_map[(round(p1y), round(p3y))]
+            (p0x, p0y), (p4x, p4y) = p0, p4
+            # TODO: Idk if this is quite right
+            dy1 = dx/2 if (p0x < p1x) == (p1y < 0) else -dx/2
+            dy3 = dx/2 if (p4x < p3x) == (p1y < 0) else -dx/2
+            p1, p2, p3 = (p1x+dx, p1y+dy1), (p2x+dx, p2y), (p3x+dx, p3y + dy3)
+            p0 = (p0x, p0y + dy1)
+            p4 = (p4x, p4y + dy3)
+            path[i:i+5] = p0, p1, p2, p3, p4
+            print(p0, p1, p2, p3, p4)
+
+    return path
 
 
 def build_stupid_graph(gcode):
@@ -371,7 +467,7 @@ def build_stupid_graph(gcode):
     # This occurs when we have performed some "backtracking" in the knot, i.e.
     # when we encounter a crossing we've seen already before we've encountered
     # all crossings in the diagram. E.g., in the knot (6,4).
-    cross_x = [i*(n+3) for i in range(n)]
+    cross_x = [i*3 for i in range(n)]
 
     # Keep track of crossings we've seen already.
     cross_seen = [False for i in range(n)]
@@ -408,6 +504,8 @@ def build_stupid_graph(gcode):
                 stop = True
             if stop:
                 break
+
+    path = find_x_conflicts(path, n)
 
     return path, cross_x, signs
 
@@ -467,7 +565,7 @@ if __name__ == '__main__':
     knot = gknot[(8, 4)]
     # knot = gknot[(3, 1)]
     # knot = gknot[(6,4)]
-    # knot = gknot[(11,2)]
+    knot = gknot[(8,16)]
     # knot = gknot[(5,2)]
     # knot = gknot[(4,1)]
     path, cross_x, signs = build_stupid_graph(knot)
