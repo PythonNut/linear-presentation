@@ -411,8 +411,34 @@ def build_stupid_graph(gcode):
 
     return path, cross_x, signs
 
+def space_xy(draw_path, cross_x):
+    """
+    gets it good enough to fix by hand
+    """
+    x_vals = set()
+    y_vals = set()
+    for x,y in draw_path:
+        x_vals.add((x))
+        y_vals.add((y))
 
-def draw_presentation(draw_paths, x_vals, signs, fname="test_gauss"):
+    x_vals = sorted(x_vals)
+    y_vals = sorted(y_vals)
+
+    x0 = x_vals.index(0)
+    y0 = y_vals.index(0)
+
+    x_map = {x: i-x0 for i,x in enumerate(x_vals)}
+    y_map = {y: i-y0 for i,y in enumerate(y_vals)}
+
+    new_path = []
+    for (x,y) in draw_path:
+        new_path += [(x_map[x], y_map[y])]
+
+    new_cross_x = [x_map[x] for x  in cross_x]
+
+    return new_path, new_cross_x
+
+def draw_presentation(draw_paths, x_vals, signs, fname="test_gauss", display=True):
     """
     draw
 
@@ -421,7 +447,8 @@ def draw_presentation(draw_paths, x_vals, signs, fname="test_gauss"):
 
     x_vals is
     """
-    break_width = 0.4
+    n = len(x_vals)
+    break_width = .2
 
     # Get the LaTeX preamble
     preamble = "\\documentclass[border=10pt]{standalone}\n"
@@ -431,7 +458,7 @@ def draw_presentation(draw_paths, x_vals, signs, fname="test_gauss"):
 
     drawing = ""
     for path in draw_paths:
-        drawing += "\\draw[-latex, line width=1mm]"
+        drawing += "\\draw[-latex]"
         for vert in path:
             drawing += str(vert) + " -- "
         # Remove the ` -- ` from the last coordinate, terminate the path, and
@@ -442,12 +469,12 @@ def draw_presentation(draw_paths, x_vals, signs, fname="test_gauss"):
         sign = signs[cnum]
         drawing += f"\\fill[white] ({x-break_width}, -{break_width}) rectangle ({x + break_width}, {break_width});\n"
         if sign < 0:
-            drawing += f"\\draw[line width=1mm] ({x}, {break_width}) -- ({x}, -{break_width});\n"
+            drawing += f"\\draw[] ({x}, {break_width}) -- ({x}, -{break_width});\n"
         else:
-            drawing += f"\\draw[line width=1mm] ({x-break_width}, 0) -- ({x+break_width}, 0);\n"
+            drawing += f"\\draw[] ({x-break_width}, 0) -- ({x+break_width}, 0);\n"
 
-        drawing += f"\\node[circle, fill=black, draw=black, inner sep=3pt] () at ({x}, 0) " + "{};\n"
-        drawing += f"\\node[above left] () at ({x}, 0) " + "{\\large $" + str(int(cnum+1)) + "$};\n"
+        drawing += f"\\node[circle, fill=black, draw=black, inner sep=1pt] () at ({x}, 0) " + "{};\n"
+        drawing += f"\\node[above left] () at ({x}, 0) " + "{$" + str(int(cnum+1)) + "$};\n"
 
     out_str = preamble + drawing + "\\end{tikzpicture}\n\\end{document}"
 
@@ -458,23 +485,31 @@ def draw_presentation(draw_paths, x_vals, signs, fname="test_gauss"):
         f.write(out_str)
     os.system(f"pdflatex -halt-on-error {fname}.tex | grep '^!.*' -A200 --color=always")
     print(fname)
-    os.system(f"zathura {fname}.pdf")
+    if display:
+        os.system(f"zathura {fname}.pdf")
     os.chdir("..")
     return out_str
 
 if __name__ == '__main__':
-    # knot = gknot[(6,5)]
-    knot = gknot[(8, 4)]
-    # knot = gknot[(3, 1)]
-    # knot = gknot[(6,4)]
-    # knot = gknot[(11,2)]
-    # knot = gknot[(5,2)]
-    # knot = gknot[(4,1)]
-    path, cross_x, signs = build_stupid_graph(knot)
+    # for gc in gknot.keys():
+    #     knot = gknot[gc]
+    #     path, cross_x, signs = build_stupid_graph(knot)
+    #     path, cross_x = space_xy(path, cross_x)
+    #     try:
+    #         c,i = gc
+    #         draw_presentation([path], cross_x, signs, fname=f"{c}_{i}")
+    #     except TypeError:
+    #         draw_presentation([path], cross_x, signs, fname="0")
+
+    # Bad apples currently:
+    # knot = gknot[(7,2)]
+    # knot = gknot[(7,3)]
+    # knot = gknot[(8,10)]
+    # knot = gknot[(8,18)]
+    # ...and probably more, but that's where we get wrecked rn.
 
     # pathological_test = [
     #     -1.5, 2, -3, 4.5, -5.5, 3, -6, 1.5, 7, 5.5, -4.5, 6, -2, -7
     # ]
     # path, cross_x, signs = build_stupid_graph(pathological_test)
-
-    draw_presentation([path], cross_x, signs)
+    # draw_presentation([path], cross_x, signs, fname="0")
