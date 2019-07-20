@@ -145,6 +145,7 @@ def get_gap_x(c1, c2, n):
         # exiting
         return c2 * (n + 3) - 2 - c1
     else:
+        # Suspect this never actually occurs
         return c2 * (n + 3) + 1 + n - c1
 
 def find_gap(cross_x, envelope):
@@ -199,10 +200,12 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
     delta = abs(c2i - c1i)
     if y1 == y2:
         if y1 == 0:
+            # CASE 0
             # easy
             path.append((x2, y2))
 
         else:
+            # CASE 1
             e1 = get_envelope(c_shapes, x1, y1)
             e2 = get_envelope(c_shapes, x2, y2)
             if e1 == e2:
@@ -211,10 +214,35 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
                 # them directly.
                 add_c_shape(path, x1, x2, y1)
             else:
+                # The exit and approach are on opposite sides and at least one has an containing envelope.
+
+                esc1 = escape(c_shapes, cross_x, x1, y1)
+                esc2 = escape(c_shapes, cross_x, x2, y2)
+
+                print(esc1, esc2)
+                # We already know that we aren't in a matching
+                # envelope, so we have two cases to consider.
+                # TODO: Validate that this is correct
+                # TODO: This is the same as case 4
+                if len(esc1) >= len(esc2):
+                    # we break symmetry arbitrarily
+                    x_psuedo = esc1[0][2]
+                    print('recurse!')
+                    add_c_shape(path, x1, x_psuedo, y1)
+                    get_path(path, cross_x, find_gap(cross_x, (0, x_psuedo)), c2i, x_psuedo, x2, -y1, y2)
+
+                else:
+                    x_psuedo = esc2[0][2]
+                    # Ok, so this time we go in reverse
+                    print('recurse!')
+                    get_path(path, cross_x, c1i, find_gap(cross_x, (0, x_psuedo)), x1, x_psuedo, y1, -y2)
+                    add_c_shape(path, x_psuedo, x2, y2)
+
                 print('oh no1')
 
     else:
         if y1 == 0:
+            # CASE 2
             # We are coming out of the first crossing horizontally,
             # but into the second vertically, so we must be
             # backtracking.
@@ -227,10 +255,14 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
                 add_c_shape(path, x1+1, x2, y2)
 
             else:
-                esc1 = escape(c_shapes, cross_x, x1 + 1, -1)
+                # We're backtracking, so the source must be "open to
+                # the air". In fact, it must be open on both sides of
+                # the main line.
+                assert escape(c_shapes, cross_x, x1 + 1, -1) == [None]
+                assert escape(c_shapes, cross_x, x1 + 1, +1) == [None]
+
                 esc2 = escape(c_shapes, cross_x, x2, 1)
-                print(esc1, esc2)
-                assert esc1 == [None]
+                print(esc2)
 
                 x_psuedo = esc2[0][2]
                 print('recurse!')
@@ -239,6 +271,7 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
                 print('oh no2')
 
         elif y2 == 0:
+            # CASE 3
             # We want to go into the second crossing horizontally
 
             # We go just short of the path, then we go in.
@@ -249,12 +282,31 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
             if e1 == e2:
                 # base case
                 add_c_shape(path, x1, x2 - 1, y1)
-                path.append((x2, y2))
 
             else:
+                # Two cases to consider here. Either the destination
+                # is a new vertex, or it's 1, but in either case the
+                # destination is "open to the air", although we don't
+                # know which direction is open. Therefore, all of the
+                # escaping is done on the source end.
+                esc2u = escape(c_shapes, cross_x, x2-1, +1)
+                esc2d = escape(c_shapes, cross_x, x2-1, -1)
+                assert esc2u == [None] or esc2d == [None]
+
+                esc1 = escape(c_shapes, cross_x, x1, y1)
+
+                # Thus, we escape from the source
+                x_psuedo = esc1[0][2]
+                add_c_shape(path, x1, x_psuedo, y1)
+                print("recurse!")
+                get_path(path, cross_x, find_gap(cross_x, (0, x_psuedo)), c2i, x_psuedo, x2-1, -y1, y2)
+
                 print('oh no3')
 
+            path.append((x2, y2))
+
         else:
+            # CASE 4
             # We must exit and approach from different sides, so we
             # must cross the main line at some point. The envelopes
             # cannot be equal unless they are both the None (aka.
