@@ -34,6 +34,20 @@ def get_cnum(c):
 
     return int(abs(c))
 
+def decompose_c(c):
+    over_under = 1 if c > 0 else -1
+    c = abs(c)
+    pos_neg = 1 if c % 1 == 0 else -1
+    cnum = int(abs(c))
+    return cnum, over_under, pos_neg
+
+def recompose_c(cnum, over_under, pos_neg):
+    if pos_neg == -1:
+        cnum += 0.5
+    if over_under == -1:
+        cnum *= -1
+    return cnum
+
 def get_y_in(cross_seen, c):
     """
     Get the incident y value corresponding to the term
@@ -194,6 +208,24 @@ def escape(c_shapes, cross_x, x, y):
     else:
         return [e]
 
+def normalize_gauss_order(gcode):
+    crossings_map = {}
+    top_cross = 0
+    new_gcode = []
+    for c in gcode:
+        cnum, over_under, pos_neg = decompose_c(c)
+        if cnum not in crossings_map:
+            top_cross += 1
+            crossings_map[cnum] = top_cross
+
+        new_gcode.append(recompose_c(
+            crossings_map[cnum],
+            over_under,
+            pos_neg
+        ))
+
+    return new_gcode
+
 def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
     n = len(cross_x)
     c_shapes = get_c_shapes(path)
@@ -353,6 +385,11 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
 
 
 def build_stupid_graph(gcode):
+    norm_gcode = normalize_gauss_order(gcode)
+    if gcode != norm_gcode:
+        print(f"Reordered\n{gcode} to\n{norm_gcode}.")
+        gcode = norm_gcode
+
     # The total number of crossings (n) is going to be 1/2 the total length of
     # the gauss code. We use integer divide to implicitly cast to an int so that
     # we can put it into `range(n)` later.
