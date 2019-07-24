@@ -1,3 +1,34 @@
+def get_cnum(c):
+    """
+    Extract the crossing number corresponding to an entry in a gauss code.
+
+    Args:
+
+    Crossings in our gauss code are formatted like
+
+    (+/-) (crossing number).(0/0.5)
+
+    where (+) indicates we're on an overstrand, (-) indicates we're on an
+    understrand, a trailing (.0) indicates the crossing is positive, and a
+    trailing (.5) indicates the crossing is negative.
+    """
+
+    if c < 0:
+        if c % 1 != 0:
+            c += 0.5
+    else:
+        if c % 1 != 0:
+            c -= 0.5
+
+    return int(abs(c))
+
+def conn_sum(gcode0, gcode1, ind=0):
+    c0nums = {get_cnum(c) for c in gcode0}
+    cmax = max(c0nums)
+    print(cmax)
+    gcode1 = [c + cmax if c > 0 else c - cmax for c in gcode1]
+    return gcode0[:ind] + gcode1 + gcode0[ind:]
+
 # def convert_
 
 gknot = {

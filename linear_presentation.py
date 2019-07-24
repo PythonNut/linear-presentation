@@ -22,7 +22,7 @@
 # If you want to build your own, try these
 # ┌ └ ┐ ┘ ├ ┤ ┬ ┴ ┼ │ ─
 
-from gauss_codes import gknot
+from gauss_codes import gknot, conn_sum
 import os
 
 
@@ -689,17 +689,24 @@ def construct_all():
 
 
 if __name__ == "__main__":
-    construct_all()
+    # construct_all()
 
     # Bad apples currently:
+    # knot = gknot[(6,2)]
     # knot = gknot[(7,2)]
     # knot = gknot[(7,3)]
     # knot = gknot[(8,10)]
-    # knot = gknot[(8,17)]
 
-    # path, cross_x, signs = build_stupid_graph(knot)
-    # path, cross_x = space_xy(path, cross_x)
-    # draw_presentation(path, cross_x, signs, fname="test_gauss")
+    knot_inds_to_sum = [(8,10), (8,10), (8,10), (8,10)]
+    inds = [4, 1, 2, 7]
+    knot = gknot[knot_inds_to_sum.pop()]
+    for i, ind in zip(inds, knot_inds_to_sum):
+        knot = conn_sum(knot, gknot[ind], ind=i)
+
+    path, cross_x, signs = build_stupid_graph(knot)
+    path, cross_x = space_xy(path, cross_x)
+    print(path)
+    draw_presentation([path], cross_x, signs, fname="test_gauss")
 
     # ...and probably more, but that's where we get wrecked rn.
 
