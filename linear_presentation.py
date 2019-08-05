@@ -22,8 +22,10 @@
 # If you want to build your own, try these
 # ┌ └ ┐ ┘ ├ ┤ ┬ ┴ ┼ │ ─
 
+import itertools as it
 from gauss_codes import gknot, conn_sum
 import os, math
+import networkx as nx
 
 
 ################################################################################
@@ -31,6 +33,14 @@ import os, math
 #                               Helper Functions                               #
 #                                                                              #
 ################################################################################
+
+
+def rotate_right(l, n):
+    return l[-n:] + l[:-n]
+
+
+def irotate_right(l, n):
+    return it.chain(l[-n:], l[:-n])
 
 
 def sign(i):
@@ -157,6 +167,86 @@ def get_y_in(cross_seen, c):
     return c_y
 
 
+def build_embedding_graph(gcode):
+    n = len(gcode) // 2
+
+    G = nx.Graph()
+
+    crossings = []
+    knot_order = []
+    # First, build crossing gadgets
+    for i in range(n):
+        nodes = range(5 * i, 5 * i + 5)
+        G.add_nodes_from(nodes)
+
+        t, l, c, r, b = nodes
+        G.add_edge(l, t)
+        G.add_edge(r, t)
+        G.add_edge(b, l)
+        G.add_edge(b, r)
+
+        crossings.append(nodes)
+
+    for i in range(len(gcode)):
+        # Get information from the gauss code
+        cross1, o1, p1 = decompose_c(gcode[i])
+        cross2, o2, p2 = decompose_c(gcode[(i + 1) % len(gcode)])
+        print(cross1, cross2, o1, o2, p1, p2)
+
+        t1, l1, c1, r1, b1 = crossings[cross1 - 1]
+        t2, l2, c2, r2, b2 = crossings[cross2 - 1]
+
+        if o1 == 1:
+            src = t1
+        elif p1 == 1:
+            src = l1
+        else:
+            src = r1
+
+        if o2 == 1:
+            dst = b2
+        elif p2 == 1:
+            dst = r2
+        else:
+            dst = l2
+
+        G.add_edge(c1, src)
+        G.add_edge(src, dst)
+        G.add_edge(dst, c2)
+        knot_order.append([c1, src, dst])
+
+    assert nx.check_planarity(G)[0]
+
+    print(crossings)
+
+    return G, knot_order
+
+
+def walk_face(embed, src, dst):
+    face = [src, dst]
+
+    while True:
+        last, new = embed.next_face_half_edge(*face[-2:])
+        if [last, new] == face[:2]:
+            break
+        face.append(new)
+
+    return face[:-1]
+
+
+def get_all_faces(G, embed):
+    faces = []
+    half_edges = set(it.chain(G.edges, map(lambda e: e[::-1], G.edges)))
+    while half_edges:
+        e = next(iter(half_edges))
+        face = walk_face(embed, *e)
+        faces.append(face)
+        for fe in zip(face, irotate_right(face, -1)):
+            half_edges.remove(fe)
+
+    return faces
+
+
 def add_c_shape(path, x1, x2, y_sign):
     y = y_sign * abs(x2 - x1)
     path.append((x1, y))
@@ -189,77 +279,51 @@ def get_envelope(c_shapes, x, y):
     return min_c
 
 
-# def get_gap_x(c1, c2, r_gap_c, n):
-#     l_gap_c = r_gap_c - 1
-
-#     # In this case, we're entering _in_ through the gap, so we want to hug a
-#     # different side.
-#     if l_gap_c < c1:
-#         x_shift = l_gap_c - c2 + 1
-#         return (l_gap_c * (n + 3)) + x_shift
-#     # Exiting gap
-#     else:
-#         x_shift = c2 - r_gap_c + 1
-#         return r_gap_c * (n + 3) - x_shift
-
-
-def get_gap_x(c1, c2, n):
-    assert c1 != c2
-    if c1 < c2:
-        # exiting
-        return c2 * (n + 3) - 2 - c1
-    else:
-        # Suspect this never actually occurs
-        return c2 * (n + 3) + 1 + n - c1
-
-
-def find_gap(cross_x, envelope):
-    print(envelope)
+def find_gap(cross_x, path, envelope):
+    print("finding gap for", envelope)
     assert envelope != None
     _, ex2 = envelope
+    c_shapes = get_c_shapes(path)
 
-    # stupid algorithm
-    for i, x in enumerate(cross_x):
-        if x > ex2:
-            return i
+    # For sanity checking, we ensure that the crossing is valid by
+    # checking for horizontal lines between the two nearest crossings.
 
-    return len(cross_x)
+    # TODO: This is sketch, we are advancing past the last crossing
+    # and back from the first by cross_x[1], which is supposed to be
+    # the delta.
+    next_x = min((x for x in cross_x if x > ex2), default=cross_x[-1] + cross_x[1])
+    prev_x = max((x for x in cross_x if x < ex2), default=-cross_x[1])
 
-
-def check_gap(c_shapes, cross_x, gapi):
-    gx1 = cross_x[gapi - 1]
-
-    # TODO: this is sketch
-    if gapi < len(cross_x):
-        gx2 = cross_x[gapi]
-    else:
-        gx2 = cross_x[-1] + cross_x[1]
-
-    # checking for a line segment
+    # Check for the connecting line segment on the main line
     for (cx1, cx2, cy) in c_shapes:
-        if cy == 0 and cx1 <= gx1 and gx2 <= cx2:
-            return False
+        if cy == 0 and prev_x + 1 <= cx1 <= cx2 <= next_x - 1:
+            print(f"blocking segment {cx1}, {cx2} found inside {prev_x}, {next_x}")
+            return [False, -1, -1, -1]
 
-    return True
+    # Ok the gap exists, so where is it? ex2 is the right side of the
+    # envelope, so it's the right bound. We need to search for the
+    # left bound.
+    right_bound = ex2
+    left_bound = max((x for (x, y) in path if x < right_bound), default=-cross_x[1])
+    midpoint = (right_bound + left_bound) / 2
+
+    print(f"gap from {left_bound} to {right_bound}, midpoint {midpoint}")
+    return True, left_bound, midpoint, right_bound
 
 
-def escape(c_shapes, cross_x, x, y):
-    n = len(cross_x)
+def escape(cross_x, path, x, y):
+    print(f"Escaping from {x} at y = {y}")
+    c_shapes = get_c_shapes(path)
     e = get_envelope(c_shapes, x, y)
     if e is None:
         return [None]
 
-    gapi = find_gap(cross_x, e)
+    gap_found, _, midpoint, _ = find_gap(cross_x, path, e)
 
-    if check_gap(c_shapes, cross_x, gapi):
-        # calculate c1 from x and c2 from gap
-        c1 = x // (n + 3)
-        c2 = gapi
-        x2 = get_gap_x(c1, c2, n)
-        return [(*e, x2)] + escape(c_shapes, cross_x, x2, -y)
+    if gap_found:
+        return [(*e, midpoint)] + escape(cross_x, path, midpoint, -y)
 
-    else:
-        return [e]
+    return [e]
 
 
 def normalize_gauss_order(gcode):
@@ -277,15 +341,20 @@ def normalize_gauss_order(gcode):
     return new_gcode
 
 
-def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
+def get_path(path, cross_x, x1, x2, y1, y2):
+    print(f"Getting path from {x1} to {x2}")
     n = len(cross_x)
     c_shapes = get_c_shapes(path)
-    delta = abs(c2i - c1i)
     if y1 == y2:
         if y1 == 0:
             # CASE 0
             # easy
             path.append((x2, y2))
+            # TODO: This case may not be as easy as we though
+            assert get_envelope(c_shapes, x1 + 1, 1) == None
+            assert get_envelope(c_shapes, x2 - 1, 1) == None
+            assert get_envelope(c_shapes, x1 + 1, -1) == None
+            assert get_envelope(c_shapes, x2 - 1, -1) == None
 
         else:
             # CASE 1
@@ -296,11 +365,12 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
                 # the same side, so we know that we can just connect
                 # them directly.
                 add_c_shape(path, x1, x2, y1)
+
             else:
                 # The exit and approach are on opposite sides and at least one has an containing envelope.
 
-                esc1 = escape(c_shapes, cross_x, x1, y1)
-                esc2 = escape(c_shapes, cross_x, x2, y2)
+                esc1 = escape(cross_x, path, x1, y1)
+                esc2 = escape(cross_x, path, x2, y2)
 
                 print(esc1, esc2)
                 # We already know that we aren't in a matching
@@ -310,33 +380,15 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
                 if len(esc1) >= len(esc2):
                     # we break symmetry arbitrarily
                     x_psuedo = esc1[0][2]
-                    print("recurse!")
+                    print("recurse! 1.1")
                     add_c_shape(path, x1, x_psuedo, y1)
-                    get_path(
-                        path,
-                        cross_x,
-                        find_gap(cross_x, (0, x_psuedo)),
-                        c2i,
-                        x_psuedo,
-                        x2,
-                        -y1,
-                        y2,
-                    )
+                    get_path(path, cross_x, x_psuedo, x2, -y1, y2)
 
                 else:
                     x_psuedo = esc2[0][2]
                     # Ok, so this time we go in reverse
-                    print("recurse!")
-                    get_path(
-                        path,
-                        cross_x,
-                        c1i,
-                        find_gap(cross_x, (0, x_psuedo)),
-                        x1,
-                        x_psuedo,
-                        y1,
-                        -y2,
-                    )
+                    print("recurse! 1.2")
+                    get_path(path, cross_x, x1, x_psuedo, y1, -y2)
                     add_c_shape(path, x_psuedo, x2, y2)
 
                 print("oh no1")
@@ -348,6 +400,14 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
             # but into the second vertically, so we must be
             # backtracking.
 
+            # The question is, which way do we go, up or down?
+
+            # First, we need to compute the orientation of the gadgets
+            # edge_order = [0, 3, 4, 1]
+            # src_rotation_map = {(+1, +1): 1, (+1, -1): 1, (-1, +1): 2, (-1, -1): 0}
+            # src_edge_order = rotate_right(edge_order, src_rotation_map[decompose_c(c)])
+
+            ## Old implementation here
             path.append((x1 + 1, 0))
             e1 = get_envelope(c_shapes, x1, y2)
             e2 = get_envelope(c_shapes, x2, y2)
@@ -359,24 +419,15 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
                 # We're backtracking, so the source must be "open to
                 # the air". In fact, it must be open on both sides of
                 # the main line.
-                assert escape(c_shapes, cross_x, x1 + 1, -1) == [None]
-                assert escape(c_shapes, cross_x, x1 + 1, +1) == [None]
+                assert escape(cross_x, path, x1 + 1, -1) == [None]
+                assert escape(cross_x, path, x1 + 1, +1) == [None]
 
-                esc2 = escape(c_shapes, cross_x, x2, 1)
+                esc2 = escape(cross_x, path, x2, y2)
                 print(esc2)
 
                 x_psuedo = esc2[0][2]
-                print("recurse!")
-                get_path(
-                    path,
-                    cross_x,
-                    c1i,
-                    find_gap(cross_x, (0, x_psuedo)),
-                    x1,
-                    x_psuedo,
-                    y1,
-                    -y2,
-                )
+                print(f"recurse! 2 {x_psuedo}")
+                get_path(path, cross_x, x1, x_psuedo, y1, -y2)
                 add_c_shape(path, x_psuedo, x2, y2)
                 print("oh no2")
 
@@ -399,26 +450,17 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
                 # destination is "open to the air", although we don't
                 # know which direction is open. Therefore, all of the
                 # escaping is done on the source end.
-                esc2u = escape(c_shapes, cross_x, x2 - 1, +1)
-                esc2d = escape(c_shapes, cross_x, x2 - 1, -1)
+                esc2u = escape(cross_x, path, x2 - 1, +1)
+                esc2d = escape(cross_x, path, x2 - 1, -1)
                 assert esc2u == [None] or esc2d == [None]
 
-                esc1 = escape(c_shapes, cross_x, x1, y1)
+                esc1 = escape(cross_x, path, x1, y1)
 
                 # Thus, we escape from the source
                 x_psuedo = esc1[0][2]
                 add_c_shape(path, x1, x_psuedo, y1)
-                print("recurse!")
-                get_path(
-                    path,
-                    cross_x,
-                    find_gap(cross_x, (0, x_psuedo)),
-                    c2i,
-                    x_psuedo,
-                    x2 - 1,
-                    -y1,
-                    y2,
-                )
+                print("recurse! 3")
+                get_path(path, cross_x, x_psuedo, x2 - 1, -y1, y2)
 
                 print("oh no3")
 
@@ -442,14 +484,19 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
                 # right, and we add 1 to make room for the horizontal
                 # exit from the last crossing.
 
-                x_psuedo = cross_x[-1] + 1 + min(n - c1i, n - c2i)
+                # x_psuedo = cross_x[-1] + 1 + min(n - c1i, n - c2i)
+
+                x_max = cross_x[-1] + cross_x[1]
+                x_min = max(x for (x, y) in path)
+                x_psuedo = (x_max + x_min) / 2
+
                 add_c_shape(path, x1, x_psuedo, y1)
                 add_c_shape(path, x_psuedo, x2, y2)
             else:
                 # The exit and approach are on opposite sides and at least one has an containing envelope.
 
-                esc1 = escape(c_shapes, cross_x, x1, y1)
-                esc2 = escape(c_shapes, cross_x, x2, y2)
+                esc1 = escape(cross_x, path, x1, y1)
+                esc2 = escape(cross_x, path, x2, y2)
 
                 print(esc1, esc2)
                 # We already know that we aren't in a matching
@@ -458,33 +505,15 @@ def get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2):
                 if len(esc1) >= len(esc2):
                     # we break symmetry arbitrarily
                     x_psuedo = esc1[0][2]
-                    print("recurse!")
+                    print("recurse! 4.1")
                     add_c_shape(path, x1, x_psuedo, y1)
-                    get_path(
-                        path,
-                        cross_x,
-                        find_gap(cross_x, (0, x_psuedo)),
-                        c2i,
-                        x_psuedo,
-                        x2,
-                        -y1,
-                        y2,
-                    )
+                    get_path(path, cross_x, x_psuedo, x2, -y1, y2)
 
                 else:
                     x_psuedo = esc2[0][2]
                     # Ok, so this time we go in reverse
-                    print("recurse!")
-                    get_path(
-                        path,
-                        cross_x,
-                        c1i,
-                        find_gap(cross_x, (0, x_psuedo)),
-                        x1,
-                        x_psuedo,
-                        y1,
-                        -y2,
-                    )
+                    print("recurse! 4.2")
+                    get_path(path, cross_x, x1, x_psuedo, y1, -y2)
                     add_c_shape(path, x_psuedo, x2, y2)
 
 
@@ -512,10 +541,14 @@ def build_stupid_graph(gcode):
     # This occurs when we have performed some "backtracking" in the knot, i.e.
     # when we encounter a crossing we've seen already before we've encountered
     # all crossings in the diagram. E.g., in the knot (6,4).
-    cross_x = [i * (n + 3) for i in range(n)]
+    cross_x = [i * 3 for i in range(n)]
 
     # Keep track of crossings we've seen already.
     cross_seen = [False for i in range(n)]
+
+    G, _ = build_embedding_graph(gcode)
+    embed = nx.check_planarity(G)[1]
+    faces = get_all_faces(G, embed)
 
     for i in range(len(gcode) - 1):
         # Get information from the gauss code
@@ -530,14 +563,13 @@ def build_stupid_graph(gcode):
         cross_seen[c1i] = True
 
         print(f"c: {c1} → {c2}, x: {x1} → {x2}, y: {y1} → {y2}")
-
-        get_path(path, cross_x, c1i, c2i, x1, x2, y1, y2)
-
-    # fix the termination FIXME!
-    x1, _ = path[-1]
-    y1 = -1 * get_y_in(True, gcode[-1])
-    print(f"c: {gcode[-1]} → {gcode[0]}, x: {x1} → {0}, y: {y1} → {0}")
-    get_path(path, cross_x, 0, 0, x1, 0, y1, 0)
+        get_path(path, cross_x, x1, x2, y1, y2)
+    else:
+        # fix the termination FIXME!
+        x1, _ = path[-1]
+        y1 = -1 * get_y_in(True, gcode[-1])
+        print(f"c: {gcode[-1]} → {gcode[0]}, x: {x1} → {0}, y: {y1} → {0}")
+        get_path(path, cross_x, x1, 0, y1, 0)
 
     # Store the under/overcrossing and handedness information of the crossings
     c_info = []
@@ -780,27 +812,34 @@ if __name__ == "__main__":
 
     # Bad apples currently:
     # knot = gknot[(6,2)]
-    # knot = gknot[(7, 2)]
-    # knot = knot[2:] + knot[:2]
+    # knot = gknot[(7,2)]
+    # knot = gknot[(6,6)]
     # knot = gknot[(7,3)]
     # knot = gknot[(8,10)]
 
     # knot_inds_to_sum = [(8,10), (8,10), (8,10), (8,10)]
-    # knot_inds_to_sum = [(6,1), (8,9)]
-    # inds = [0,0]
+    # inds = [4, 1, 2, 7]
     # knot = gknot[knot_inds_to_sum.pop()]
     # for i, ind in zip(inds, knot_inds_to_sum):
     #     knot = conn_sum(knot, gknot[ind], ind=i)
 
-    # path, cross_x, c_info = build_stupid_graph(knot)
+    # path, cross_x, signs = build_stupid_graph(knot)
     # path, cross_x = space_xy(path, cross_x)
     # print(path)
-    # draw_presentation([path], cross_x, c_info, fname="test_gauss")
+    # draw_presentation([path], cross_x, signs, fname="test_gauss")
 
+    knot = gknot[(11, 2)]
+    # knot = gknot[(11, 42)]
+    # knot = gknot[(11,2)]
+
+    path, cross_x, signs = build_stupid_graph(knot)
+    # path, cross_x = space_xy(path, cross_x)
+    draw_presentation([path], cross_x, signs, fname="0")
     # ...and probably more, but that's where we get wrecked rn.
 
     # pathological_test = [
     #     -1.5, 2, -3, 4.5, -5.5, 3, -6, 1.5, 7, 5.5, -4.5, 6, -2, -7
     # ]
-    # path, cross_x, c_info = build_stupid_graph(pathological_test)
-    # draw_presentation([path], cross_x, c_info, fname="0")
+    # path, cross_x, signs = build_stupid_graph(pathological_test)
+    # path, cross_x = space_xy(path, cross_x)
+    # draw_presentation([path], cross_x, signs, fname="0")
