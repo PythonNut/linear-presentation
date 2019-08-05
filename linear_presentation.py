@@ -23,7 +23,7 @@
 # ┌ └ ┐ ┘ ├ ┤ ┬ ┴ ┼ │ ─
 
 from gauss_codes import gknot, conn_sum
-import os
+import os, math
 
 
 ################################################################################
@@ -539,24 +539,34 @@ def build_stupid_graph(gcode):
     print(f"c: {gcode[-1]} → {gcode[0]}, x: {x1} → {0}, y: {y1} → {0}")
     get_path(path, cross_x, 0, 0, x1, 0, y1, 0)
 
-    signs = []
+    # Store the under/overcrossing and handedness information of the crossings
+    c_info = []
     for cnum in range(1, n + 1):
+        # Yeah jon this is gross what the heck
         # This is gross
         for c in gcode:
             stop = False
             if get_cnum(c) == cnum:
-                signs.append((c / abs(c)))
+                c_info.append(((c / abs(c)), c % 1))
                 stop = True
             if stop:
                 break
 
-    return path, cross_x, signs
+    return path, cross_x, c_info
 
+
+# OK this is the worst thing ever but just ignore it for now
+def to_list(mylist):
+    return [list(mytuple) for mytuple in mylist]
+
+def to_tuple(mylist):
+    return [tuple(mylist) for sublist in mylist]
 
 def space_xy(draw_path, cross_x):
     """
     gets it good enough to fix by hand
     """
+
     x_vals = set()
     y_vals = set()
     for x, y in draw_path:
@@ -566,22 +576,40 @@ def space_xy(draw_path, cross_x):
     x_vals = sorted(x_vals)
     y_vals = sorted(y_vals)
 
+    # print(y_vals)
+
+    # print(x_vals)
+
     x0 = x_vals.index(0)
     y0 = y_vals.index(0)
 
-    x_map = {x: i - x0 for i, x in enumerate(x_vals)}
-    y_map = {y: i - y0 for i, y in enumerate(y_vals)}
+    x_map = {x: x_vals.index(x) - x0 for x in x_vals}
+    y_map = {y: y_vals.index(y) - y0 for y in y_vals}
 
     new_path = []
     for (x, y) in draw_path:
-        new_path += [(x_map[x], y_map[y])]
+        new_path += [[x_map[x], y_map[y]]]
 
     new_cross_x = [x_map[x] for x in cross_x]
+
+    for i, ((x1, y1), (x2, y2)) in enumerate(zip(new_path[:-1], new_path[1:])):
+        dist = (abs(x1 - x2)+1)//2
+        # print(f"i={i}, dist={dist}, dist//2={dist//2}")
+        if y1 == y2:
+            sgn = sign(y1)
+            # Adjust the y values
+            # print((x1, y1), (x2,y2), sgn*dist)
+            if abs(sgn*dist) < abs(y1):
+                new_path[i][1] = sgn*dist
+                new_path[i+1][1] = sgn*dist
+
+    for i in range(len(new_path)):
+        new_path[i] = tuple(new_path[i])
 
     return new_path, new_cross_x
 
 
-def draw_presentation(draw_paths, x_vals, signs, fname="test_gauss", display=True):
+def draw_presentation(draw_paths, x_vals, c_info, fname="test_gauss", display=True):
     """
     draw
 
@@ -600,6 +628,12 @@ def draw_presentation(draw_paths, x_vals, signs, fname="test_gauss", display=Tru
     preamble += "\\begin{tikzpicture}\n"
 
     drawing = ""
+
+    # broken_paths = []
+    # this_path = []
+    # for (xi, yi), (xj, yj) in zip(draw_paths[:-1], draw_paths[1:]):
+    #     if yi == 0 and yj == 0:
+
     for path in draw_paths:
         drawing += "\\draw[-latex]"
         for vert in path:
@@ -607,22 +641,64 @@ def draw_presentation(draw_paths, x_vals, signs, fname="test_gauss", display=Tru
         # Remove the ` -- ` from the last coordinate, terminate the path, and
         # break the line
         drawing = drawing[:-4] + ";\n"
-    for cnum, x in enumerate(x_vals):
-        x = x_vals[cnum]
-        sign = signs[cnum]
-        drawing += f"\\fill[white] ({x-break_width}, -{break_width}) rectangle ({x + break_width}, {break_width});\n"
-        if sign < 0:
-            drawing += f"\\draw[] ({x}, {break_width}) -- ({x}, -{break_width});\n"
-        else:
-            drawing += f"\\draw[] ({x-break_width}, 0) -- ({x+break_width}, 0);\n"
 
+    # Draw all the breaks in the dumb way
+    for x in x_vals:
+        drawing += f"\\fill[white] ({x-break_width}, -{break_width}) rectangle ({x + break_width}, {break_width});\n"
+
+    for cnum, x in enumerate(x_vals):
+        u_or_o, handedness = c_info[cnum]
+        # print(u_or_o, handedness)
+
+        # Draw the horizontal strand, going a bit further than the break because
+        # otherwise the arrowtip gets too thin to cover the line at the end
         drawing += (
-            f"\\node[circle, fill=black, draw=black, inner sep=1pt] () at ({x}, 0) "
-            + "{};\n"
+            f"\\draw[-latex] ({x-1+break_width}, 0) -- ({x-.75*break_width}, 0);\n"
         )
+
+        if u_or_o < 0:
+            # Only need to reinsert vertical strands
+            drawing += f"\\draw ({x}, {break_width}) -- ({x}, {-1*break_width});\n"
+            if handedness != 0:
+                drawing += f"\\draw[-latex] ({x}, -1) -- ({x}, {-.75*break_width});\n"
+            else:
+                # drawing += f"\\draw[-latex] ({x}, {-1.75*break_width}) -- ({x}, -1);\n"
+                drawing += f"\\draw[-latex] ({x}, 1) -- ({x}, {.75*break_width});\n"
+
+        else:
+            drawing += f"\\draw ({x-break_width}, 0) -- ({x+break_width}, 0);\n"
+
+            if handedness != 0:
+                drawing += f"\\draw[-latex] ({x}, 1) -- ({x}, {.75*break_width});\n"
+            else:
+                drawing += (
+                    f"\\draw[-latex] ({x}, -1) -- ({x}, {-.75*break_width});\n"
+                )
+
+        # Annotate with sign, and fill depending on sign
+        if handedness != 0:
+            drawing += (
+                f"\\node[circle, fill=black, draw=black, inner sep=1pt] () at ({x}, 0) "
+                + "{};\n"
+            )
+            handedness = "-"
+        else:
+            drawing += (
+                f"\\node[circle, fill=white, draw=black, inner sep=1pt] () at ({x}, 0) "
+                + "{};\n"
+            )
+            handedness = "+"
+
+        # Add the label
         drawing += (
-            f"\\node[above left] () at ({x}, 0) " + "{$" + str(int(cnum + 1)) + "$};\n"
+            f"\\node[above left] () at ({x}, 0) "
+            + "{\small $"
+            + str(int(cnum + 1))
+            + "^"
+            + handedness
+            + "$};\n"
         )
+        drawing += "\n\n"
 
     out_str = preamble + drawing + "\\end{tikzpicture}\n\\end{document}"
 
@@ -674,44 +750,57 @@ def construct_all():
         knot = gknot[gc]
         sorted_dict = get_shift_dict(knot)
 
+        try:
+            c, i = gc
+        except TypeError:
+            c, i = 0, 0
+
         # We want to get all cyclic shift permutations as well
         for shift_num in range(len(knot) // 2):
             print(knot)
-            path, cross_x, signs = build_stupid_graph(knot)
-            path, cross_x = space_xy(path, cross_x)
             try:
-                c, i = gc
-                draw_presentation([path], cross_x, signs, fname=f"{c}_{i}")
+                path, cross_x, c_info = build_stupid_graph(knot)
+                path, cross_x = space_xy(path, cross_x)
+                draw_presentation([path], cross_x, c_info, fname=f"{c}_{i}_{shift_num}", display=False)
+            except RecursionError:
+                print(f"RecursionError on {knot}")
+                pass
             except TypeError:
-                draw_presentation([path], cross_x, signs, fname="0")
+                print(f"TypeError on {knot}")
+                pass
+            except IndexError:
+                print(f"IndexError on {knot}")
+                pass
 
             knot = knot[1:] + [knot[0]]
 
 
 if __name__ == "__main__":
-    # construct_all()
+    construct_all()
 
     # Bad apples currently:
     # knot = gknot[(6,2)]
-    # knot = gknot[(7,2)]
+    # knot = gknot[(7, 2)]
+    # knot = knot[2:] + knot[:2]
     # knot = gknot[(7,3)]
     # knot = gknot[(8,10)]
 
-    knot_inds_to_sum = [(8,10), (8,10), (8,10), (8,10)]
-    inds = [4, 1, 2, 7]
-    knot = gknot[knot_inds_to_sum.pop()]
-    for i, ind in zip(inds, knot_inds_to_sum):
-        knot = conn_sum(knot, gknot[ind], ind=i)
+    # knot_inds_to_sum = [(8,10), (8,10), (8,10), (8,10)]
+    # knot_inds_to_sum = [(6,1), (8,9)]
+    # inds = [0,0]
+    # knot = gknot[knot_inds_to_sum.pop()]
+    # for i, ind in zip(inds, knot_inds_to_sum):
+    #     knot = conn_sum(knot, gknot[ind], ind=i)
 
-    path, cross_x, signs = build_stupid_graph(knot)
-    path, cross_x = space_xy(path, cross_x)
-    print(path)
-    draw_presentation([path], cross_x, signs, fname="test_gauss")
+    # path, cross_x, c_info = build_stupid_graph(knot)
+    # path, cross_x = space_xy(path, cross_x)
+    # print(path)
+    # draw_presentation([path], cross_x, c_info, fname="test_gauss")
 
     # ...and probably more, but that's where we get wrecked rn.
 
     # pathological_test = [
     #     -1.5, 2, -3, 4.5, -5.5, 3, -6, 1.5, 7, 5.5, -4.5, 6, -2, -7
     # ]
-    # path, cross_x, signs = build_stupid_graph(pathological_test)
-    # draw_presentation([path], cross_x, signs, fname="0")
+    # path, cross_x, c_info = build_stupid_graph(pathological_test)
+    # draw_presentation([path], cross_x, c_info, fname="0")

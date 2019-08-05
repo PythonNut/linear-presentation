@@ -1,3 +1,10 @@
+def convert_gc(gc):
+    """
+    Convert from the gauss code standard
+    """
+
+    return
+
 def get_cnum(c):
     """
     Extract the crossing number corresponding to an entry in a gauss code.
@@ -78,3 +85,28 @@ gknot = {
 (11,2):[-1,2.5,-3.5,-4.5,5.5,-6.5,7,-8,4.5,-5.5,6.5,9.5,-2.5,10,-11,3.5,-9.5,1,-10,11,8,-7],
 (11,42):[-1,2,3.5,-4,5,-6,7,-3.5,8.5,-5,6,9.5,-10.5,11.5,-9.5,1,-2,10.5,-11.5,-7,4,-8.5]
 }
+
+# Values represent where to slice gauss code to get a nice presentation of the knot
+cycle_rules = {
+    (5,2):4,
+    (6,2):1,
+    (6,4):3,
+    (6,5):3,
+    (7,0):0,
+    (7,2):2,
+    (7,3):2,
+    (7,4):4,
+    (7,5):5,
+    # (7,6):
+    (8,1):2,
+    (8,4):5,
+    (8,6):2,
+    (8,8):6
+}
+
+# def apply_cycle_rules(gcode_dict):
+#     new_dict = {}
+#     for key in gcode_dict:
+#         knot = gcode_dict[key]
+#         i
+#         new_dict[key] =
