@@ -26,6 +26,7 @@ import itertools as it
 from gauss_codes import gknot, conn_sum
 import os, math
 import networkx as nx
+import traceback
 
 
 ################################################################################
@@ -41,6 +42,19 @@ def rotate_right(l, n):
 
 def irotate_right(l, n):
     return it.chain(l[-n:], l[:-n])
+
+
+def reorder_cycle_with_prefix(cycle, a, b):
+    n = len(cycle)
+    i, j = cycle.index(a), cycle.index(b)
+    if j == 0 and i == n - 1:
+        return rotate_right(cycle, 1)
+    if i == 0 and j == n - 1:
+        return rotate_right(cycle[::-1], 1)
+    if i > j:
+        cycle = cycle[::-1]
+        i, j = n - 1 - i, n - 1 - j
+    return rotate_right(cycle, -i)
 
 
 def sign(i):
@@ -247,6 +261,26 @@ def get_all_faces(G, embed):
     return faces
 
 
+def get_gadget_orientations(gcode):
+    # First, we need to compute the orientation of the gadgets
+    edge_order = [0, 3, 4, 1]
+    rotation_map = {(+1, +1): 1, (+1, -1): 1, (-1, +1): 2, (-1, -1): 0}
+
+    crossings_seen = set()
+    orientations = []
+    for c in gcode:
+        cnum, over_under, pos_neg = decompose_c(c)
+        if cnum in crossings_seen:
+            continue
+        crossings_seen.add(cnum)
+        print(f"{cnum}, {over_under}, {pos_neg}")
+
+        edges = rotate_right(edge_order, rotation_map[over_under, pos_neg])
+        orientations.append([x + 5 * len(orientations) for x in edges])
+
+    return orientations
+
+
 def add_c_shape(path, x1, x2, y_sign):
     y = y_sign * abs(x2 - x1)
     path.append((x1, y))
@@ -319,6 +353,8 @@ def escape(cross_x, path, x, y):
         return [None]
 
     gap_found, _, midpoint, _ = find_gap(cross_x, path, e)
+    if midpoint == x:
+        return [e]
 
     if gap_found:
         return [(*e, midpoint)] + escape(cross_x, path, midpoint, -y)
@@ -341,7 +377,9 @@ def normalize_gauss_order(gcode):
     return new_gcode
 
 
-def get_path(path, cross_x, x1, x2, y1, y2):
+def get_path(geometry, path, x1, x2, y1, y2):
+    cross_x, faces, gadget_orient = geometry
+
     print(f"Getting path from {x1} to {x2}")
     n = len(cross_x)
     c_shapes = get_c_shapes(path)
@@ -351,10 +389,18 @@ def get_path(path, cross_x, x1, x2, y1, y2):
             # easy
             path.append((x2, y2))
             # TODO: This case may not be as easy as we though
-            assert get_envelope(c_shapes, x1 + 1, 1) == None
-            assert get_envelope(c_shapes, x2 - 1, 1) == None
-            assert get_envelope(c_shapes, x1 + 1, -1) == None
-            assert get_envelope(c_shapes, x2 - 1, -1) == None
+
+            # We know that either the source and dest are both open to
+            # the air, or both are contained inside the same
+            # forwardtracking envelope.
+            e1u = get_envelope(c_shapes, x1 + 1, +1)
+            e1d = get_envelope(c_shapes, x1 + 1, -1)
+            e2u = get_envelope(c_shapes, x2 - 1, +1)
+            e2d = get_envelope(c_shapes, x2 - 1, -1)
+
+            assert e1u == e2u
+            assert e1d == e2d
+            assert e1u == e1d == None or e1u[1] == e1d[1]
 
         else:
             # CASE 1
@@ -382,13 +428,13 @@ def get_path(path, cross_x, x1, x2, y1, y2):
                     x_psuedo = esc1[0][2]
                     print("recurse! 1.1")
                     add_c_shape(path, x1, x_psuedo, y1)
-                    get_path(path, cross_x, x_psuedo, x2, -y1, y2)
+                    get_path(geometry, cross_x, x_psuedo, x2, -y1, y2)
 
                 else:
                     x_psuedo = esc2[0][2]
                     # Ok, so this time we go in reverse
                     print("recurse! 1.2")
-                    get_path(path, cross_x, x1, x_psuedo, y1, -y2)
+                    get_path(geometry, path, x1, x_psuedo, y1, -y2)
                     add_c_shape(path, x_psuedo, x2, y2)
 
                 print("oh no1")
@@ -400,36 +446,85 @@ def get_path(path, cross_x, x1, x2, y1, y2):
             # but into the second vertically, so we must be
             # backtracking.
 
-            # The question is, which way do we go, up or down?
-
-            # First, we need to compute the orientation of the gadgets
-            # edge_order = [0, 3, 4, 1]
-            # src_rotation_map = {(+1, +1): 1, (+1, -1): 1, (-1, +1): 2, (-1, -1): 0}
-            # src_edge_order = rotate_right(edge_order, src_rotation_map[decompose_c(c)])
-
-            ## Old implementation here
             path.append((x1 + 1, 0))
-            e1 = get_envelope(c_shapes, x1, y2)
-            e2 = get_envelope(c_shapes, x2, y2)
-            if e1 == e2:
-                # base case
-                add_c_shape(path, x1 + 1, x2, y2)
 
-            else:
-                # We're backtracking, so the source must be "open to
-                # the air". In fact, it must be open on both sides of
-                # the main line.
-                assert escape(cross_x, path, x1 + 1, -1) == [None]
-                assert escape(cross_x, path, x1 + 1, +1) == [None]
+            # The question is, which way do we go, up or down? And if
+            # we go the opposite way, how far out do we go?
+            forwardtracking = False
 
-                esc2 = escape(cross_x, path, x2, y2)
-                print(esc2)
+            # If we are connecting two crossings, we are in a position
+            # to determine whether to forwardtrack or not, based on
+            # topological information from the planar graph embedding.
+            if {x1, x2}.issubset(cross_x):
+                c1i, c2i = cross_x.index(x1), cross_x.index(x2)
+                src_u, src_r, src_d, _ = gadget_orient[c1i]
+                _, dest_r, _, dest_l = gadget_orient[c2i]
+                dest_in = gadget_orient[c2i][1 - y2]
 
-                x_psuedo = esc2[0][2]
-                print(f"recurse! 2 {x_psuedo}")
-                get_path(path, cross_x, x1, x_psuedo, y1, -y2)
-                add_c_shape(path, x_psuedo, x2, y2)
-                print("oh no2")
+                match, cross = (src_u, src_d) if y2 == 1 else (src_d, src_u)
+                print(match, src_r, cross)
+
+                [match_face] = [
+                    f for f in faces if {match, src_r}.issubset(f) and len(f) > 3
+                ]
+                _, _, match_dest, *match_rest = reorder_cycle_with_prefix(
+                    match_face, match, src_r
+                )
+
+                [cross_face] = [
+                    f for f in faces if {cross, src_r}.issubset(f) and len(f) > 3
+                ]
+                _, _, cross_dest, *cross_rest = reorder_cycle_with_prefix(
+                    cross_face, cross, src_r
+                )
+
+                assert match_dest == cross_dest == dest_in
+
+                # We want to look at the rightmost point of each face.
+                # If they're both to the right of the source, then we
+                # know we need to fowardtrack.
+                max_internal_crossing = max(v // 5 for v in match_rest)
+                max_external_crossing = max(v // 5 for v in cross_rest)
+                leftmost_max = min(max_internal_crossing, max_external_crossing)
+
+                if len(cross_rest) == 1:
+                    print("Forwardtracking around exterior")
+                    x_psuedo = (n - 1) * 3 + 1.5
+                    add_c_shape(path, x1 + 1, x_psuedo, -y2)
+                    get_path(geometry, path, x_psuedo, x2, y2, y2)
+                    forwardtracking = True
+                elif leftmost_max > c1i:
+                    x_psuedo = leftmost_max * 3 + 1.5
+                    print("Forwardtracking to {x_psuedo}")
+                    add_c_shape(path, x1 + 1, x_psuedo, -y2)
+                    get_path(geometry, path, x_psuedo, x2, y2, y2)
+                    forwardtracking = True
+
+            if not forwardtracking:
+                # We already chose go without forwardtracking
+
+                e1 = get_envelope(c_shapes, x1 + 1, y2)
+                e2 = get_envelope(c_shapes, x2, y2)
+                if e1 == e2:
+                    # base case
+                    add_c_shape(path, x1 + 1, x2, y2)
+
+                else:
+                    # We're backtracking, so the source must either be
+                    # "open to the air" on both sides of the main
+                    # line, or we must be stuck inside a
+                    # forwardtracking envelope.
+                    e0 = get_envelope(c_shapes, x1 + 1, -y2)
+                    assert e0 == e1 == None or e0[1] == e1[1]
+
+                    esc2 = escape(cross_x, path, x2, y2)
+                    print(esc2)
+
+                    x_psuedo = esc2[0][2]
+                    print(f"recurse! 2 {x_psuedo}")
+                    get_path(geometry, path, x1, x_psuedo, y1, -y2)
+                    add_c_shape(path, x_psuedo, x2, y2)
+                    print("oh no2")
 
         elif y2 == 0:
             # CASE 3
@@ -452,7 +547,7 @@ def get_path(path, cross_x, x1, x2, y1, y2):
                 # escaping is done on the source end.
                 esc2u = escape(cross_x, path, x2 - 1, +1)
                 esc2d = escape(cross_x, path, x2 - 1, -1)
-                assert esc2u == [None] or esc2d == [None]
+                # assert esc2u == [None] or esc2d == [None]
 
                 esc1 = escape(cross_x, path, x1, y1)
 
@@ -460,7 +555,7 @@ def get_path(path, cross_x, x1, x2, y1, y2):
                 x_psuedo = esc1[0][2]
                 add_c_shape(path, x1, x_psuedo, y1)
                 print("recurse! 3")
-                get_path(path, cross_x, x_psuedo, x2 - 1, -y1, y2)
+                get_path(geometry, path, x_psuedo, x2, -y1, y2)
 
                 print("oh no3")
 
@@ -484,8 +579,6 @@ def get_path(path, cross_x, x1, x2, y1, y2):
                 # right, and we add 1 to make room for the horizontal
                 # exit from the last crossing.
 
-                # x_psuedo = cross_x[-1] + 1 + min(n - c1i, n - c2i)
-
                 x_max = cross_x[-1] + cross_x[1]
                 x_min = max(x for (x, y) in path)
                 x_psuedo = (x_max + x_min) / 2
@@ -507,13 +600,13 @@ def get_path(path, cross_x, x1, x2, y1, y2):
                     x_psuedo = esc1[0][2]
                     print("recurse! 4.1")
                     add_c_shape(path, x1, x_psuedo, y1)
-                    get_path(path, cross_x, x_psuedo, x2, -y1, y2)
+                    get_path(geometry, path, x_psuedo, x2, -y1, y2)
 
                 else:
                     x_psuedo = esc2[0][2]
                     # Ok, so this time we go in reverse
                     print("recurse! 4.2")
-                    get_path(path, cross_x, x1, x_psuedo, y1, -y2)
+                    get_path(geometry, path, x1, x_psuedo, y1, -y2)
                     add_c_shape(path, x_psuedo, x2, y2)
 
 
@@ -549,6 +642,9 @@ def build_stupid_graph(gcode):
     G, _ = build_embedding_graph(gcode)
     embed = nx.check_planarity(G)[1]
     faces = get_all_faces(G, embed)
+    gadget_orient = get_gadget_orientations(gcode)
+    geometry = cross_x, faces, gadget_orient
+    print(faces)
 
     for i in range(len(gcode) - 1):
         # Get information from the gauss code
@@ -563,13 +659,20 @@ def build_stupid_graph(gcode):
         cross_seen[c1i] = True
 
         print(f"c: {c1} → {c2}, x: {x1} → {x2}, y: {y1} → {y2}")
-        get_path(path, cross_x, x1, x2, y1, y2)
+        try:
+            get_path(geometry, path, x1, x2, y1, y2)
+        except:
+            traceback.print_exc()
+            break
     else:
         # fix the termination FIXME!
         x1, _ = path[-1]
         y1 = -1 * get_y_in(True, gcode[-1])
         print(f"c: {gcode[-1]} → {gcode[0]}, x: {x1} → {0}, y: {y1} → {0}")
-        get_path(path, cross_x, x1, 0, y1, 0)
+        try:
+            get_path(geometry, path, x1, 0, y1, 0)
+        except:
+            traceback.print_exc()
 
     # Store the under/overcrossing and handedness information of the crossings
     c_info = []
@@ -817,7 +920,7 @@ if __name__ == "__main__":
     # knot = gknot[(7,3)]
     # knot = gknot[(8,10)]
 
-    # knot_inds_to_sum = [(8,10), (8,10), (8,10), (8,10)]
+    # knot_inds_to_sum = [(8, 10), (8, 10), (8, 10), (8, 10)]
     # inds = [4, 1, 2, 7]
     # knot = gknot[knot_inds_to_sum.pop()]
     # for i, ind in zip(inds, knot_inds_to_sum):
@@ -828,12 +931,12 @@ if __name__ == "__main__":
     # print(path)
     # draw_presentation([path], cross_x, signs, fname="test_gauss")
 
-    knot = gknot[(11, 2)]
-    # knot = gknot[(11, 42)]
+    knot = gknot[(8, 10)]
+    knot = gknot[(11, 42)]
     # knot = gknot[(11,2)]
 
     path, cross_x, signs = build_stupid_graph(knot)
-    # path, cross_x = space_xy(path, cross_x)
+    path, cross_x = space_xy(path, cross_x)
     draw_presentation([path], cross_x, signs, fname="0")
     # ...and probably more, but that's where we get wrecked rn.
 
