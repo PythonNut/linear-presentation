@@ -27,6 +27,7 @@ from gauss_codes import gknot, conn_sum
 import os, math
 import networkx as nx
 import traceback
+from collections import Counter
 
 
 ################################################################################
@@ -377,6 +378,57 @@ def normalize_gauss_order(gcode):
     return new_gcode
 
 
+def check_path(path, complete=False):
+    # Ok so this "algorithm" is completely stupid and repeated
+    # executions will run in O(n^3) time, but also I don't really care
+    # about speed right now, and an asymptotically faster solution is
+    # a "lot" (aka. at least 5min) of work so I'm not going to do that
+    # right now.
+
+    segs1, segs2 = it.tee(zip(path, path[1:]))
+
+    # every path is either vertical or horizontal, with nonzero length
+    for (x1, y1), (x2, y2) in segs1:
+        assert (x1 == x2) or (y1 == y2)
+
+    corner_intersect = Counter()
+
+    for ((x1, y1), (x2, y2)), ((x3, y3), (x4, y4)) in it.combinations(segs2, 2):
+        if x1 == x2 and x3 == x4:
+            if x2 == x3:
+                assert max(y1, y2) <= min(y3, y4) or min(y1, y2) >= max(y3, y4)
+        elif y1 == y2 and y3 == y4:
+            if y2 == y3:
+                assert max(x1, x2) <= min(x3, x4) or min(x1, x2) >= max(x3, x4)
+        else:
+            if y1 == y2:
+                x1, x3 = x3, x1
+                y1, y3 = y3, y1
+                x2, x4 = x4, x2
+                y2, y4 = y4, y2
+
+            # seg 1 is vertical now, seg 2 is horizontal
+            assert x1 == x2
+            assert y3 == y4
+
+            if x1 in (x3, x4) and y3 in (y1, y2):
+                corner_intersect[x1, y3] += 1
+            else:
+                assert not (
+                    min(x3, x4) <= x1 <= max(x3, x4)
+                    and min(y1, y2) <= y3 <= max(y1, y2)
+                )
+
+    for (x, y), count in corner_intersect.items():
+        if count > 1:
+            if complete:
+                assert count == 4
+            assert x % 3 == 0
+            assert y == 0
+        elif complete:
+            assert x % 3 != 0 or y != 0
+
+
 def get_path(geometry, path, x1, x2, y1, y2):
     cross_x, faces, gadget_orient = geometry
 
@@ -661,6 +713,7 @@ def build_stupid_graph(gcode):
         print(f"c: {c1} → {c2}, x: {x1} → {x2}, y: {y1} → {y2}")
         try:
             get_path(geometry, path, x1, x2, y1, y2)
+            check_path(path)
         except:
             traceback.print_exc()
             break
@@ -671,6 +724,7 @@ def build_stupid_graph(gcode):
         print(f"c: {gcode[-1]} → {gcode[0]}, x: {x1} → {0}, y: {y1} → {0}")
         try:
             get_path(geometry, path, x1, 0, y1, 0)
+            check_path(path, complete=True)
         except:
             traceback.print_exc()
 
