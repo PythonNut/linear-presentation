@@ -181,34 +181,6 @@ def test_intersection2(a,b, c,d):
     r = abs(rab + rcd - rd)
     return abs(2 * abs(mab - mcd) - m) > r
 
-# def require_planarity(MLP, paths, parity, inds, n, bound, m):
-#     pln_inds = MLP.new_variable(binary=True)
-#     rads = {}
-#     for i in range(n):
-#         for j in range(m-1):
-#             rads[i, j] = generate_abs(MLP, paths[i, j] - paths[i, j+1], 2*bound)
-
-#     for i, k in it.combinations(range(n), 2):
-#         for j, l in it.product(range(m-1), range(m-1)):
-#             rad_diff = generate_abs(MLP, rads[i, j] - rads[k, l], 2*bound)
-#             mid_diff = generate_abs(MLP, (paths[i, j] + paths[i, j+1]) - (paths[k, l] + paths[k, l+1]), 4*bound)
-#             radius = generate_abs(MLP, rads[i, j] + rads[k, l] - rad_diff, 8*bound) + 1
-#             origin = rads[i, j] + rads[k, l] + rad_diff
-
-#             flipi = parity[i] if j %2 == 0 else (1 - parity[i])
-#             flipk = parity[k] if l %2 == 0 else (1 - parity[k])
-
-#             hot = -8*bound*(4 - inds[i, j] - inds[i, j+1] - inds[k, l] - inds[k, l+1])
-#             both_bot = - 8*bound * (flipi + flipk)
-#             MLP.add_constraint(2 * mid_diff - origin + 8*bound * pln_inds[i,j,k,l] >= radius + both_bot + hot)
-#             MLP.add_constraint(-2 * mid_diff + origin + 8*bound * (1 - pln_inds[i,j,k,l]) >= radius + both_bot + hot)
-
-#             both_top = - 8*bound * (2 - flipi - flipk)
-#             MLP.add_constraint(2 * mid_diff - origin + 8*bound * pln_inds[i,j,k,l] >= radius + both_top + hot)
-#             MLP.add_constraint(-2 * mid_diff + origin + 8*bound * (1 - pln_inds[i,j,k,l]) >= radius + both_top + hot)
-
-#     return pln_inds
-
 def require_planarity(MLP, paths, parity, inds, n, bound, m):
     pln_inds = MLP.new_variable(binary=True)
     maxs = {}
