@@ -266,3 +266,10 @@ def plot(paths, parity, crossings=[]):
     plt.gcf().set_size_inches(10.5, 18.5)
     plt.axis('scaled')
     plt.show()
+
+def nelson_gc_to_sage_gc(gc):
+    new_gc = [int(x) for x in gc]
+    assert len(new_gc)%2 == 0
+    n = len(new_gc)//2
+    new_orient = [1 if i in gc else -1 for i in range(1, n+1)]
+    return new_gc, new_orient
