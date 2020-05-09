@@ -59,6 +59,7 @@ function require_planarity(MOD, paths, parity, inds, n, bound, m)
 
             @constraint(MOD, b <= c-1 + M*(1-inside) + M*branch + hot + both_top)
             @constraint(MOD, b <= c-1 + M*(1-inside) + M*branch + hot + both_bot)
+            # a < b < c < d
 
             # c < d < a < b
             @constraint(MOD, d <= a-1 + M*(1-inside) + M*(1-branch) + hot + both_top)
@@ -137,7 +138,6 @@ n = divrem(length(semiarcs), 2)[1]
 m = 8
 
 MOD = Model(Gurobi.Optimizer)
-set_optimizer_attribute(MOD, "Seed", 3)
 set_optimizer_attribute(MOD, "MIPFocus", 3)
 set_optimizer_attribute(MOD, "Presolve", 2)
 
