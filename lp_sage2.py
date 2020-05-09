@@ -247,8 +247,8 @@ if __name__ == "__main__":
     m = 8
 
     MLP = MixedIntegerLinearProgram(maximization=False, solver=GurobiBackend)
-    paths, parity, inds = build_paths(MLP, len(semiarcs), n**2, m)
-    pln_inds = require_planarity(MLP, paths, parity, inds, len(semiarcs), n**2 + 2, m)
+    paths, parity, inds = build_paths(MLP, 2*n, n**2, m)
+    pln_inds = require_planarity(MLP, paths, parity, inds, 2*n, n**2 + 2, m)
     require_connections(MLP, semiarcs, paths, parity, inds, n, -n+2, m, n**2 + 2)
     MLP.set_objective(MLP.sum(inds.values()))
 

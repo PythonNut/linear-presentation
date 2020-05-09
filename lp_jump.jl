@@ -133,16 +133,16 @@ semiarcs = [
     (4, 2, 16, 0), (16, 2, 15, 2), (15, 0, 14, 0), (14, 2, 1, 3)
 ]
 
-n = 16
-m = 4
+n = divrem(length(semiarcs), 2)[1]
+m = 8
 
 MOD = Model(Gurobi.Optimizer)
 set_optimizer_attribute(MOD, "Seed", 3)
 set_optimizer_attribute(MOD, "MIPFocus", 3)
 set_optimizer_attribute(MOD, "Presolve", 2)
 
-paths, parity, inds = build_paths(MOD, length(semiarcs), n^2, m)
-pln_inds = require_planarity(MOD, paths, parity, inds, length(semiarcs), n^2 + 2, m)
+paths, parity, inds = build_paths(MOD, 2*n, n^2, m)
+pln_inds = require_planarity(MOD, paths, parity, inds, 2*n, n^2 + 2, m)
 require_connections(MOD, semiarcs, paths, parity, inds, n, -n+2, m, n^2 + 2)
 
 @objective(MOD, MOI.MIN_SENSE, sum(inds))
