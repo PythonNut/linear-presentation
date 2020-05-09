@@ -36,7 +36,12 @@ def conn_sum(gcode0, gcode1, ind=0):
     gcode1 = [c + cmax if c > 0 else c - cmax for c in gcode1]
     return gcode0[:ind] + gcode1 + gcode0[ind:]
 
-# def convert_
+def multi_sum_from_gknot(idxs, inds=None):
+    inds = inds or [0] * (len(idxs) - 1)
+    knot = gknot[idxs[0]]
+    for i, idx in zip(inds, idxs[1:]):
+        knot = conn_sum(knot, gknot[idx], ind=i)
+    return knot
 
 gknot = {
   (0):[-1,1],

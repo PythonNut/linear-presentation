@@ -213,7 +213,16 @@ def nelson_gc_to_sage_gc(gc):
     assert len(new_gc)%2 == 0
     n = len(new_gc)//2
     new_orient = [1 if i in gc else -1 for i in range(1, n+1)]
-    return new_gc, new_orient
+    return [[new_gc], new_orient]
+
+def knot_to_layout(K):
+    [gc], orient = K.oriented_gauss_code()
+    gc, orient = fix_gc_order(gc, orient)
+    crossings, semiarcs = linear_layout(gc, orient)
+    return crossings, semiarcs
+
+def plain_semiarcs(semiarcs):
+    return [(a, b.value, c, d.value) for a,b,c,d in semiarcs]
 
 if __name__ == "__main__":
     B = BraidGroup(4)
@@ -232,9 +241,7 @@ if __name__ == "__main__":
     K = Knot([[1,5,2,4],[3,8,4,9],[5,11,6,10],[14,7,15,8],[9,2,10,3],[18,12,19,11],[6,13,7,14],[22,15,23,16],[20,18,21,17],[12,20,13,19],[24,21,1,22],[16,23,17,24]])
     # K = Knot([[4,2,5,1],[8,4,9,3],[12,9,1,10],[10,5,11,6],[6,11,7,12],[2,8,3,7]])
 
-    [gc], orient = K.oriented_gauss_code()
-    gc, orient = fix_gc_order(gc, orient)
-    crossings, semiarcs = linear_layout(gc, orient)
+    crossings, semiarcs = knot_to_layout(K)
 
     n = len(crossings)
     m = 8
