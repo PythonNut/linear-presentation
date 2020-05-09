@@ -14,22 +14,6 @@ class Dir(Enum):
     def flip(self):
         return Dir((self.value + 2)%4)
 
-B = BraidGroup(4)
-K = Knot(B([1,1,1]))
-# K = Knot(B([1,1,1,2,-1,2,-3,2,-3]))
-
-# K = Knot([[3,1,2,4], [8,9,1,7], [5,6,7,3], [4,18,6,5],
-#           [17,19,8,18], [9,10,11,14], [10,12,13,11],
-#           [12,19,15,13], [20,16,14,15], [16,20,17,2]])
-
-# K = Link([[[1,-2,-3,-8,-12,13,-14,15,-7,-1,2,-4,10,11,-13,12,
-#             -11,-16,4,3,-5,6,-9,7,-15,14,16,-10,8,9,-6,5]],
-#           [-1,-1,1,1,1,1,-1,1,1,-1,1,-1,-1,-1,-1,-1]])
-
-# K = Knot([[[-1,2,-3,4,-5,6,-7,1,-4,8,-6,5,-8,3,-2,7]], [-1,-1,-1,-1,1,1,-1,-1]])
-
-[gc], orient = K.oriented_gauss_code()
-
 def fix_gc_order(gc, orient):
     new_gc = []
     mapping = {}
@@ -46,8 +30,6 @@ def fix_gc_order(gc, orient):
     new_orient = [orient[rev_mapping[c]-1] for c in range(1, len(mapping)+1)]
 
     return new_gc, new_orient
-
-gc, orient = fix_gc_order(gc, orient)
 
 def linear_layout(gc, orient):
     n = max(gc)
@@ -75,10 +57,6 @@ def linear_layout(gc, orient):
     semiarcs.append((abs(b), exit_dir, abs(1), Dir.LEFT))
 
     return crossings, semiarcs
-
-crossings, semiarcs = linear_layout(gc, orient)
-
-MLP = MixedIntegerLinearProgram(maximization=False, solver=GurobiBackend)
 
 def build_paths(MLP, n, bound, m):
     # Just create a set of n sequences of length m with one-hot values
@@ -114,44 +92,19 @@ def build_paths(MLP, n, bound, m):
 
     return paths, parity, inds
 
-intermediate_vals = MLP.new_variable(integer=True, nonnegative=True)
-intermediate_inds = MLP.new_variable(binary=True)
-intermediate_counter= 0
-
-def generate_max(MLP, expr1, expr2, M):
-    global intermediate_counter
-    value = intermediate_vals[intermediate_counter]
-    ind = intermediate_inds[intermediate_counter]
-
-    MLP.add_constraint(value >= expr1)
-    MLP.add_constraint(value >= expr2)
-
-    MLP.add_constraint(expr1 + 2*M*ind >= value)
-    MLP.add_constraint(expr2 + 2*M*(1-ind) >= value)
-
-    intermediate_counter += 1
-    return value
-
-def generate_abs(MLP, expr, M):
-    return generate_max(MLP, expr, -expr, M)
-
-def test_intersection2(a,b, c,d):
-    mab = a + b
-    mcd = c + d
-    rab = abs(a - b)
-    rcd = abs(c - d)
-
-    rd = abs(rab - rcd)
-    m = rab + rcd + rd
-    r = abs(rab + rcd - rd)
-    return abs(2 * abs(mab - mcd) - m) > r
-
 def require_planarity(MLP, paths, parity, inds, n, bound, m):
     pln_inds = MLP.new_variable(binary=True)
-    maxs = {}
+    maxs = MLP.new_variable(integer=True, nonnegative=True)
+    maxs.set_max(bound)
+    max_inds = MLP.new_variable(binary=True)
+
     for i in range(n):
         for j in range(m-1):
-            maxs[i, j] = generate_max(MLP, paths[i, j], paths[i, j+1], bound)
+            MLP.add_constraint(maxs[i, j] >= paths[i, j])
+            MLP.add_constraint(maxs[i, j] >= paths[i, j+1])
+
+            MLP.add_constraint(paths[i, j] + bound*max_inds[i, j] >= maxs[i, j])
+            MLP.add_constraint(paths[i, j+1] + bound*(1-max_inds[i, j]) >= maxs[i, j])
 
     for i, k in it.combinations(range(n), 2):
         for j, l in it.product(range(m-1), range(m-1)):
@@ -225,16 +178,6 @@ def require_connections(MLP, semiarcs, paths, parity, inds, step_size, shift, m,
             if db == Dir.DOWN:
                 MLP.add_constraint(flip >= this_slice - next_slice)
 
-n = len(crossings)
-m = 8
-paths, parity, inds = build_paths(MLP, len(semiarcs), n**2, m)
-pln_inds = require_planarity(MLP, paths, parity, inds, len(semiarcs), n**2 + 2, m)
-require_connections(MLP, semiarcs, paths, parity, inds, n, -n+2, m, n**2 + 2)
-
-MLP.set_objective(MLP.sum(inds.values()))
-
-MLP.solve(log=1)
-
 def unpack_paths(paths, n, bound, m):
     result = []
     for i in range(n):
@@ -242,8 +185,6 @@ def unpack_paths(paths, n, bound, m):
         result.append(path)
     return result
 
-got_paths = unpack_paths(MLP.get_values(paths), len(semiarcs), n ** 2, m)
-got_parity = MLP.get_values(parity)
 
 def plot(paths, parity, crossings=[]):
     def add_arc(a, b, y=0, down=False):
@@ -273,3 +214,38 @@ def nelson_gc_to_sage_gc(gc):
     n = len(new_gc)//2
     new_orient = [1 if i in gc else -1 for i in range(1, n+1)]
     return new_gc, new_orient
+
+if __name__ == "__main__":
+    B = BraidGroup(4)
+    K = Knot(B([1,1,1]))
+    # K = Knot(B([1,1,1,2,-1,2,-3,2,-3]))
+
+    # K = Knot([[3,1,2,4], [8,9,1,7], [5,6,7,3], [4,18,6,5],
+    #           [17,19,8,18], [9,10,11,14], [10,12,13,11],
+    #           [12,19,15,13], [20,16,14,15], [16,20,17,2]])
+
+    # K = Link([[[1,-2,-3,-8,-12,13,-14,15,-7,-1,2,-4,10,11,-13,12,
+    #             -11,-16,4,3,-5,6,-9,7,-15,14,16,-10,8,9,-6,5]],
+    #           [-1,-1,1,1,1,1,-1,1,1,-1,1,-1,-1,-1,-1,-1]])
+
+    # K = Knot([[[-1,2,-3,4,-5,6,-7,1,-4,8,-6,5,-8,3,-2,7]], [-1,-1,-1,-1,1,1,-1,-1]])
+    K = Knot([[1,5,2,4],[3,8,4,9],[5,11,6,10],[14,7,15,8],[9,2,10,3],[18,12,19,11],[6,13,7,14],[22,15,23,16],[20,18,21,17],[12,20,13,19],[24,21,1,22],[16,23,17,24]])
+    # K = Knot([[4,2,5,1],[8,4,9,3],[12,9,1,10],[10,5,11,6],[6,11,7,12],[2,8,3,7]])
+
+    [gc], orient = K.oriented_gauss_code()
+    gc, orient = fix_gc_order(gc, orient)
+    crossings, semiarcs = linear_layout(gc, orient)
+
+    n = len(crossings)
+    m = 8
+
+    MLP = MixedIntegerLinearProgram(maximization=False, solver=GurobiBackend)
+    paths, parity, inds = build_paths(MLP, len(semiarcs), n**2, m)
+    pln_inds = require_planarity(MLP, paths, parity, inds, len(semiarcs), n**2 + 2, m)
+    require_connections(MLP, semiarcs, paths, parity, inds, n, -n+2, m, n**2 + 2)
+    MLP.set_objective(MLP.sum(inds.values()))
+
+    MLP.solve(log=1)
+
+    got_paths = unpack_paths(MLP.get_values(paths), len(semiarcs), n ** 2, m)
+    got_parity = MLP.get_values(parity)
