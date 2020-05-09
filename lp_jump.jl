@@ -25,7 +25,7 @@ function build_paths(MOD, n, bound, m)
 end
 
 function require_planarity(MOD, paths, parity, inds, n, bound, m)
-    @variable(MOD, pln_inds[1:n, 1:m, 1:n, 1:m, 1:2], Bin)
+    @variable(MOD, pln_inds[i=1:n, 1:m, i:n, 1:m, 1:2], Bin)
     @variable(MOD, 0 <= maxs[1:n, 1:m] <= bound, Int)
     @variable(MOD, max_inds[1:n, 1:m], Bin)
 
