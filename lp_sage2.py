@@ -78,42 +78,7 @@ def linear_layout(gc, orient):
 
 crossings, semiarcs = linear_layout(gc, orient)
 
-
 MLP = MixedIntegerLinearProgram(maximization=False, solver=GurobiBackend)
-# eo = MLP.new_variable(integer=True)
-# v = MLP.new_variable(binary=True)
-# # V[i, j] semiarc i crosses the diagonal at i
-
-# eo_counter = 0
-# def even(expr):
-#     global eo_counter
-#     constraint = expr == 2 * eo[eo_counter]
-#     eo_counter += 1
-#     return constraint
-
-# def odd(expr):
-#     global eo_counter
-#     constraint = expr == 2 * eo[eo_counter] + 1
-#     eo_counter += 1
-#     return constraint
-
-# for i, (a, adir, b, bdir) in enumerate(semiarcs):
-#     # Parity of crossings must match if both in and out directions are known
-#     if {adir, bdir}.issubset((Dir.UP, Dir.DOWN)):
-#         print(a, b, adir, bdir)
-#         total_crossings = MLP.sum(v[i, j] for j in range(len(crossings)))
-#         if adir == bdir:
-#             MLP.add_constraint(even(total_crossings))
-#         else:
-#             MLP.add_constraint(odd(total_crossings))
-
-#     # If you are going between two new crossings, always go straight
-#     elif adir == Dir.RIGHT and bdir == Dir.LEFT:
-#         total_crossings = MLP.sum(v[i, j] for j in range(len(crossings)))
-#         MLP.add_constraint(total_crossings == 0)
-
-# MLP.set_objective(MLP.sum(v.values()))
-# MLP.solve()
 
 def build_paths(MLP, n, bound, m):
     # Just create a set of n sequences of length m with one-hot values
