@@ -3,7 +3,6 @@ using JuMP, Gurobi, Combinatorics
 function build_paths(MOD, n, bound, m)
     @variable(MOD, 0 <= paths[1:n, 1:m] <= bound, Int)
     @variable(MOD, inds[1:n, 1:m], Bin)
-    @variable(MOD, ne_inds[1:n, 1:m], Bin)
 
     for i in 1:n
         for j in 1:m
@@ -13,10 +12,6 @@ function build_paths(MOD, n, bound, m)
 
         for j in 1:m-1
             @constraint(MOD, inds[i, j] >= inds[i, j+1])
-
-            hot = -2*bound*(2 - inds[i, j] - inds[i, j+1])
-            @constraint(MOD, paths[i, j] - paths[i, j+1] + 2*bound*ne_inds[i, j] >= 1 + hot)
-            @constraint(MOD, paths[i, j+1] - paths[i, j] + 2*bound*(1-ne_inds[i, j]) >= 1 + hot)
         end
     end
 

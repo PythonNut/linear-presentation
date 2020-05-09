@@ -69,8 +69,6 @@ def build_paths(MLP, n, bound, m):
 
     inds = MLP.new_variable(binary=True)
 
-    ne_inds = MLP.new_variable(binary=True)
-
     for i in range(n):
         for j in range(m):
             MLP.add_constraint(inds[i, j] * bound >= paths[i, j])
@@ -78,11 +76,6 @@ def build_paths(MLP, n, bound, m):
 
         for j in range(m-1):
             MLP.add_constraint(inds[i, j] >= inds[i, j+1])
-
-            hot = -2*bound*(2 - inds[i, j] - inds[i, j+1])
-            MLP.add_constraint(paths[i, j] - paths[i, j+1] + 2*bound*ne_inds[i, j] >= 1 + hot)
-            MLP.add_constraint(paths[i, j+1] - paths[i, j] + 2*bound*(1-ne_inds[i, j]) >= 1 + hot)
-
 
     # Track the parity of the demiarcs: A true value means the first
     # demiarc was in the top half.
