@@ -79,7 +79,7 @@ def linear_layout(gc, orient):
 crossings, semiarcs = linear_layout(gc, orient)
 
 
-MLP = MixedIntegerLinearProgram(maximization=False, solver="Coin")
+MLP = MixedIntegerLinearProgram(maximization=False, solver=GurobiBackend)
 # eo = MLP.new_variable(integer=True)
 # v = MLP.new_variable(binary=True)
 # # V[i, j] semiarc i crosses the diagonal at i
