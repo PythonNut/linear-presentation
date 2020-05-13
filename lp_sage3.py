@@ -217,7 +217,14 @@ def route(semiarcs):
     for i in range(1, len(semiarcs)//2 + 1):
         l = semiarc_map[i, Dir.LEFT]
         print(x, 1, bot, top[::-1], l)
+        # If this assertion fails, we would need to push the semiarc.
+        # (like for the first arc special case), but how do we know
+        # which side to generate it on?
         assert l in top or l in bot or not (top or bot)
+
+        # If this assertion fails, how do we determine which direction
+        # to shift in?
+        assert not (l in top and l in bot)
         if l in top:
             while not peek(top, l):
                 push_or_pop_bot(pop_top())
@@ -251,16 +258,32 @@ def route(semiarcs):
 
         r = semiarc_map[i, Dir.RIGHT]
         print(x, 3, bot, top[::-1], r)
+
+        # If this assertion fails, how will we know which side to pop
+        # from? If we just choose an arbitrary side we won't fail to
+        # be planar due to shifting, but we cannot guarantee
+        # optimality.
+        assert not (peek(top, r) and peek(bot, r))
+
         if peek(top, r):
             pop_top()
         elif peek(bot, r):
             pop_bot()
         else:
+            # If this assertion fails, then it is because we are on
+            # the last crossing, but we failed to find the final
+            # semiarc.
             assert (i+1, Dir.LEFT) in semiarc_map
             l2 = semiarc_map[i+1, Dir.LEFT]
+
+            # If this assertion fails, how do we know which side to
+            # push the semiarc on? If we just choose an arbitrary side
+            # we won't fail to be planar due to shifting, but we
+            # cannot guarantee optimality.
             assert l2 in top + bot + [r]
+
             if l2 == r:
-                # Arbitrary decision
+                # Arbitrary decision, either choice is optimal.
                 push_top(r)
             elif l2 in top:
                 push_bot(r)
@@ -286,6 +309,7 @@ def route(semiarcs):
     print(bot, top[::-1])
     assert top == bot == []
 
+    # Honestly this probably shouldn't be an inner function
     def deparenthesize(seq):
         result = []
         stack = []
