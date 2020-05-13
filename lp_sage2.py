@@ -178,20 +178,42 @@ def unpack_paths(paths, n, bound, m):
         result.append(path)
     return result
 
+def compact_paths(paths, crossings=[]):
+    all_points = []
+    for path in paths:
+        all_points.extend(path)
 
-def plot(paths, parity, crossings=[]):
+    all_points = sorted(set(all_points))
+    result = []
+    for path in paths:
+        new_semiarc = [all_points.index(x) for x in path]
+        result.append(new_semiarc)
+
+    new_crossings = [all_points.index(x) for x in crossings]
+    return result, new_crossings
+
+def plot(paths, parity, crossings=[], straight=0):
     def add_arc(a, b, y=0, down=False):
         h = abs(a-b)
-        c = (a + b)/2
-        if down:
-            plt.gca().add_patch(mpl.patches.Arc((c, y), h, h, theta1=180))
+        if straight >= 1 and h <= 1:
+            plt.plot([a, b], [0, 0], 'k')
+
+        elif straight >= 2:
+            if down:
+                plt.plot([a, a, b, b], [0, -h, -h, 0], 'k')
+            else:
+                plt.plot([a, a, b, b], [0, h, h, 0], 'k')
+
         else:
-            plt.gca().add_patch(mpl.patches.Arc((c, y), h, h, theta2=180))
+            c = (a + b)/2
+            if down:
+                plt.gca().add_patch(mpl.patches.Arc((c, y), h, h, theta1=180))
+            else:
+                plt.gca().add_patch(mpl.patches.Arc((c, y), h, h, theta2=180))
 
     for i, path in enumerate(paths):
         par = parity[i]
         for j, (a, b) in enumerate(zip(path, path[1:])):
-            # print(j, (par + j - 1) % 2 == 0)
             add_arc(a, b, 0, (par + j) % 2 == 0)
 
     for x in crossings:
