@@ -126,6 +126,15 @@ function require_connections(MOD, semiarcs, paths, parity, inds, step_size, shif
     end
 end
 
+function unpack_paths(paths, n, bound, m)
+    result = []
+    for i in 1:n
+        path = [round(Int, paths[i, j]) for j in 1:m if paths[i, j] > 0.5]
+        push!(result, path)
+    end
+
+    return result
+end
 
 semiarcs = [
     (1, 1, 2, 3), (2, 1, 3, 3), (3, 1, 4, 3), (4, 1, 5, 3),
