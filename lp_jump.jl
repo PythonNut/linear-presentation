@@ -96,6 +96,9 @@ function require_connections(MOD, semiarcs, paths, parity, inds, step_size, shif
             a_pos += 1
             if db == 3
                 @constraint(MOD, parity[i] == 1)
+                if m >= 3
+                    @constraint(MOD, paths[i, 3] == 0)
+                end
             end
         end
 
