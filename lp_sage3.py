@@ -223,8 +223,8 @@ def route(semiarcs):
         assert l in top or l in bot or not (top or bot)
 
         # If this assertion fails, how do we determine which direction
-        # to shift in?
-        assert not (l in top and l in bot)
+        # to shift in and how much to shift?
+        assert (top + bot).count(l) <= 1
         if l in top:
             while not peek(top, l):
                 push_or_pop_bot(pop_top())
