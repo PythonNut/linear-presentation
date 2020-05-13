@@ -51,7 +51,7 @@ function require_planarity(MOD, paths, parity, inds, n, bound, m)
             flipi = if j%2 == 1 parity[i] else (1 - parity[i]) end
             flipk = if l%2 == 1 parity[k] else (1 - parity[k]) end
 
-            hot = M*(4 - inds[i, j] - inds[i, j+1] - inds[k, l] - inds[k, l+1])
+            hot = M*(2 - inds[i, j+1] - inds[k, l+1])
             both_bot = M * (flipi + flipk)
             both_top = M * (2 - flipi - flipk)
 
