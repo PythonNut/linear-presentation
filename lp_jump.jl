@@ -1,4 +1,5 @@
-using JuMP, Gurobi, Combinatorics
+using JuMP, Combinatorics
+using Gurobi
 
 function build_paths(MOD, n, bound, m)
     @variable(MOD, 0 <= paths[1:n, 1:m] <= bound, Int)
@@ -23,24 +24,29 @@ function require_planarity(MOD, paths, parity, inds, n, bound, m)
     @variable(MOD, pln_inds[i=1:n, 1:m, i:n, 1:m, 1:2], Bin)
     @variable(MOD, 0 <= maxs[1:n, 1:m] <= bound, Int)
     @variable(MOD, max_inds[1:n, 1:m], Bin)
+    @variable(MOD, 0 <= mins[1:n, 1:m] <= bound, Int)
+    @variable(MOD, min_inds[1:n, 1:m], Bin)
 
     for i in 1:n
         for j in 1:m-1
             @constraint(MOD, maxs[i, j] >= paths[i, j])
             @constraint(MOD, maxs[i, j] >= paths[i, j+1])
 
-            @constraint(MOD, paths[i, j] + 2*bound*max_inds[i, j] >= maxs[i, j])
-            @constraint(MOD, paths[i, j+1] + 2*bound*(1-max_inds[i, j]) >= maxs[i, j])
+            @constraint(MOD, paths[i, j] + bound*max_inds[i, j] >= maxs[i, j])
+            @constraint(MOD, paths[i, j+1] + bound*(1-max_inds[i, j]) >= maxs[i, j])
+
+            @constraint(MOD, mins[i, j] <= paths[i, j])
+            @constraint(MOD, mins[i, j] <= paths[i, j+1])
+
+            @constraint(MOD, paths[i, j] - bound*min_inds[i, j] <= mins[i, j])
+            @constraint(MOD, paths[i, j+1] - bound*(1-min_inds[i, j]) <= mins[i, j])
         end
     end
 
     for (i, k) in combinations(1:n, 2)
         for j in 1:m-1, l in 1:m-1
-            b = maxs[i, j]
-            a = paths[i, j] + paths[i, j+1] - b
-            d = maxs[k, l]
-            c = paths[k, l] + paths[k, l+1] - d
-            M = 2*bound + 1
+            a, b, c, d = mins[i, j], maxs[i, j], mins[k, l], maxs[k, l]
+            M = bound + 1
 
             flipi = if j%2 == 1 parity[i] else (1 - parity[i]) end
             flipk = if l%2 == 1 parity[k] else (1 - parity[k]) end
@@ -52,9 +58,9 @@ function require_planarity(MOD, paths, parity, inds, n, bound, m)
             inside = pln_inds[i,j,k,l,1]
             branch = pln_inds[i,j,k,l,2]
 
+            # a < b < c < d
             @constraint(MOD, b <= c-1 + M*(1-inside) + M*branch + hot + both_top)
             @constraint(MOD, b <= c-1 + M*(1-inside) + M*branch + hot + both_bot)
-            # a < b < c < d
 
             # c < d < a < b
             @constraint(MOD, d <= a-1 + M*(1-inside) + M*(1-branch) + hot + both_top)
@@ -104,8 +110,8 @@ function require_connections(MOD, semiarcs, paths, parity, inds, step_size, shif
         for j in 1:m-1
             this_slice = inds[i, j]
             next_slice = inds[i, j+1]
-            @constraint(MOD, 2*bound * ((1 - this_slice) + next_slice) >= paths[i, j] - b_pos)
-            @constraint(MOD, 2*bound * ((1 - this_slice) + next_slice) >= b_pos - paths[i, j])
+            @constraint(MOD, bound * ((1 - this_slice) + next_slice) >= paths[i, j] - b_pos)
+            @constraint(MOD, bound * ((1 - this_slice) + next_slice) >= b_pos - paths[i, j])
 
             flip = if j%2 == 1 parity[i] else (1 - parity[i]) end
             if db == 0
