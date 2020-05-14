@@ -147,8 +147,9 @@ def plot(top_demiarcs, bot_demiarcs, crossings=[], straight=0):
         plt.plot([x-1, x+1], [0, 0], 'k')
 
     plt.gcf().set_size_inches(10.5, 18.5)
-    plt.axis('off')
-    plt.axes().set_aspect('equal', 'datalim')
+    ax = plt.gcf().gca()
+    ax.set_aspect('equal', 'box')
+    ax.set_axis_off()
     plt.show()
 
 def nelson_gc_to_sage_gc(gc):
