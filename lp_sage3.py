@@ -191,25 +191,29 @@ def route(semiarcs):
         bot_demiarcs.setdefault(v, []).append(x)
         bot.append(v)
 
-    def pop_top():
+    def pop_top(expect=None):
         v = top.pop()
+        if expect is not None:
+            assert expect == v
         top_demiarcs.setdefault(v, []).append(-x)
         return v
 
-    def pop_bot():
+    def pop_bot(expect=None):
         v = bot.pop()
+        if expect is not None:
+            assert expect == v
         bot_demiarcs.setdefault(v, []).append(-x)
         return v
 
     def push_or_pop_top(v):
         if peek(top, v):
-            pop_top()
+            pop_top(v)
         else:
             push_top(v)
 
     def push_or_pop_bot(v):
         if peek(bot, v):
-            pop_bot()
+            pop_bot(v)
         else:
             push_bot(v)
 
@@ -231,14 +235,14 @@ def route(semiarcs):
                 push_or_pop_bot(pop_top())
                 x += 1
 
-            pop_top()
+            pop_top(l)
 
         elif l in bot:
             while not peek(bot, l):
                 push_or_pop_top(pop_bot())
                 x += 1
 
-            pop_bot()
+            pop_bot(l)
 
         elif not (top or bot):
             # Special case: we don't know anything so we hedge our
@@ -267,9 +271,9 @@ def route(semiarcs):
         assert not (peek(top, r) and peek(bot, r))
 
         if peek(top, r):
-            pop_top()
+            pop_top(r)
         elif peek(bot, r):
-            pop_bot()
+            pop_bot(r)
         else:
             # If this assertion fails, then it is because we are on
             # the last crossing, but we failed to find the final
