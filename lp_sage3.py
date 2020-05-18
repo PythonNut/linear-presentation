@@ -4,6 +4,7 @@ import itertools as it
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
+
 class Dir(Enum):
     UP = 0
     RIGHT = 1
@@ -11,37 +12,82 @@ class Dir(Enum):
     LEFT = 3
 
     def flip(self):
-        return Dir((self.value + 2)%4)
+        """
+        Perform one of
+              UP <-> DOWN
+            LEFT <-> RIGHT
+        depending on the current value.
+        """
+        return Dir((self.value + 2) % 4)
+
 
 def fix_gc_order(gc, orient):
+    """
+    If there exist i,j with i < j such that crossing j is encountered before
+    crossing i, we say the gauss code is improperly ordered.
+
+    This function relabels the gauss code to fix that.
+    """
     new_gc = []
-    mapping = {}
+    mapping = {}  # Initialize the mapping from "old" -> "new" labels
 
     for elt in gc:
-        c, s = abs(elt), sign(elt)
+        c, s = abs(elt), sign(elt)  # "sign" gives over/under info
         if c not in mapping:
-            mapping[c] = len(mapping) + 1
+            mapping[c] = len(mapping) + 1  # relabel by order of encounter
         new_c = mapping[c]
         new_gc.append(new_c * s)
 
-    rev_mapping = {v:k for k, v in mapping.items()}
+    rev_mapping = {v: k for k, v in mapping.items()}
     assert len(rev_mapping) == len(mapping)
-    new_orient = [orient[rev_mapping[c]-1] for c in range(1, len(mapping)+1)]
+    new_orient = [orient[rev_mapping[c] - 1] for c in range(1, len(mapping) + 1)]
 
     return new_gc, new_orient
 
+
 def linear_layout(gc, orient):
+    """
+    Given the sage-format gauss code (gc, orient) as input, construct and return
+
+      1. `crossings`, a dictionary indexed by crossing number with values an
+         associated "connection information" dictionary. Basically, the
+         dictionary for crossing `i` has
+
+           a) keys: the [RIGHT, UP, LEFT, DOWN] strands involved in crossing `i`
+
+           b) values: the other endpoint of said strand, represented as a tuple
+              (j, DIR), where j is the crossing number of the endpoint, and DIR
+              describes which of [RIGHT, UP, LEFT, DOWN] this strand is for
+              crossing j.
+
+      2. `semiarcs`, a list of tuples of the form (i, DIR_i, j, DIR_j),
+         representing all of the oriented semiarcs appearing in our diagram.
+    """
     n = max(gc)
-    crossings = {i:{} for i in range(1,n+1)}
+    crossings = {i: {} for i in range(1, n + 1)}
     semiarcs = []
-    # gc = gc + [gc[0]]
+
+    # Add crossing 1 and the outgoing direction manually.
     seen = set([1])
     exit_dir = Dir.RIGHT
+
+    # Iterate through all subsequent pairs of characters in the gauss code,
+    # which essentially gets us all semiarcs directly.
     for a, b in zip(gc, gc[1:]):
+        # The way the algorithm works, whenever we see a new crossing for the
+        # first time, we always orient the incoming strand to lie on the
+        # horizontal line. This corresponds to coming in from the LEFT.
         if abs(b) not in seen:
             entry_dir = Dir.LEFT
-        elif sign(b) == orient[abs(b)-1]:
+
+        # Otherwise, we check to see whether
+        #  - `b` is positive and we're entering on an overstrand, or
+        #  - `b` is negative and we're entering on an understarnd.
+        # In both these cases, the entering strand comes in from the top.
+        elif sign(b) == orient[abs(b) - 1]:
             entry_dir = Dir.UP
+
+        # Only remaining case is entering from the bottom
         else:
             entry_dir = Dir.DOWN
 
@@ -49,8 +95,9 @@ def linear_layout(gc, orient):
         crossings[abs(b)][entry_dir] = (abs(a), exit_dir)
         semiarcs.append((abs(a), exit_dir, abs(b), entry_dir))
         seen.add(abs(a))
-        exit_dir = entry_dir.flip()
+        exit_dir = entry_dir.flip()  # Exit opposite of the way we came in
 
+    # Manually add the incoming connection for crossing 1
     crossings[abs(b)][exit_dir] = (1, Dir.LEFT)
     crossings[1][Dir.LEFT] = (abs(b), exit_dir)
     semiarcs.append((abs(b), exit_dir, abs(1), Dir.LEFT))
@@ -64,6 +111,7 @@ def unpack_paths(paths, n, bound, m):
         path = [paths[i, j] for j in range(m) if paths[i, j] > 0]
         result.append(path)
     return result
+
 
 def compact_paths(paths, crossings=[]):
     all_points = []
@@ -79,21 +127,22 @@ def compact_paths(paths, crossings=[]):
     new_crossings = [all_points.index(x) for x in crossings]
     return result, new_crossings
 
-def plot(top_demiarcs, bot_demiarcs, crossings=[], straight=0):
 
-    def demiarc_height(demiarcs):
+def plot(upper_cs, lower_cs, crossings=[], straight=0):
+    def c_height(cs):
         all_arcs = []
-        for arcs in demiarcs.values():
+        for arcs in cs.values():
             all_arcs.extend(arcs)
 
         dominate = {}
+
         for a, b in all_arcs:
             for c, d in all_arcs:
                 if a < c < d < b:
                     dominate.setdefault((a, b), []).append((c, d))
 
         height = {}
-        for a, b in sorted(all_arcs, key=lambda t:len(dominate.get(t, []))):
+        for a, b in sorted(all_arcs, key=lambda t: len(dominate.get(t, []))):
             height[a, b] = 0
             for dominated in dominate.get((a, b), []):
                 height[a, b] = max(height[a, b], height[dominated])
@@ -103,38 +152,38 @@ def plot(top_demiarcs, bot_demiarcs, crossings=[], straight=0):
 
         return height
 
-    top_heights = demiarc_height(top_demiarcs)
-    bot_heights = demiarc_height(bot_demiarcs)
+    upper_heights = c_height(upper_cs)
+    lower_heights = c_height(lower_cs)
 
     def add_arc(a, b, y=0, down=False):
-        h = abs(a-b)
+        h = abs(a - b)
         if straight >= 3:
             if down:
-                h = bot_heights[a, b]
+                h = lower_heights[a, b]
             else:
-                h = top_heights[a, b]
+                h = upper_heights[a, b]
 
-        if straight >= 1 and abs(a-b) <= 1:
-            plt.plot([a, b], [0, 0], 'k')
+        if straight >= 1 and abs(a - b) <= 1:
+            plt.plot([a, b], [0, 0], "k")
 
         elif straight >= 2:
             if down:
-                plt.plot([a, a, b, b], [0, -h, -h, 0], 'k')
+                plt.plot([a, a, b, b], [0, -h, -h, 0], "k")
             else:
-                plt.plot([a, a, b, b], [0, h, h, 0], 'k')
+                plt.plot([a, a, b, b], [0, h, h, 0], "k")
 
         else:
-            c = (a + b)/2
+            c = (a + b) / 2
             if down:
                 plt.gca().add_patch(mpl.patches.Arc((c, y), h, h, theta1=180))
             else:
                 plt.gca().add_patch(mpl.patches.Arc((c, y), h, h, theta2=180))
 
-    for arcs in top_demiarcs.values():
+    for arcs in upper_cs.values():
         for (a, b) in arcs:
             add_arc(a, b, 0, False)
 
-    for arcs in bot_demiarcs.values():
+    for arcs in lower_cs.values():
         for (a, b) in arcs:
             add_arc(a, b, 0, True)
 
@@ -144,178 +193,266 @@ def plot(top_demiarcs, bot_demiarcs, crossings=[], straight=0):
     #         add_arc(a, b, 0, (par + j) % 2 == 0)
 
     for x in crossings:
-        plt.plot([x-1, x+1], [0, 0], 'k')
+        plt.plot([x - 1, x + 1], [0, 0], "k")
 
     plt.gcf().set_size_inches(10.5, 18.5)
     ax = plt.gcf().gca()
-    ax.set_aspect('equal', 'box')
+    ax.set_aspect("equal", "box")
     ax.set_axis_off()
     plt.show()
 
+
 def nelson_gc_to_sage_gc(gc):
-    new_gc = [int(x) for x in gc]
-    assert len(new_gc)%2 == 0
-    n = len(new_gc)//2
-    new_orient = [1 if i in gc else -1 for i in range(1, n+1)]
+    """
+    Convert the gauss code format given in `gauss_codes.py` (Prof. Nelson's
+    gauss codes) to the format used internally by `sage`.
+
+    Prof. Nelson's gauss codes use `sign` to indicate under/over, and a trailing
+    `.5` to indicate negative crossings.
+
+    Sage's internal Gauss codes separate the crossing sign into a second list.
+    """
+    new_gc = [int(x) for x in gc]  # Remove all trailing .5's
+    assert len(new_gc) % 2 == 0
+    n = len(new_gc) // 2  # Number of crossings
+    new_orient = [1 if i in gc else -1 for i in range(1, n + 1)]
     return [[new_gc], new_orient]
 
+
 def knot_to_layout(K):
+    """
+    Fix the gauss code ordering if needed, and call to `linear_layout()` to get
+    the connection information for the crossings, and the list of semiarcs.
+    """
     [gc], orient = K.oriented_gauss_code()
     gc, orient = fix_gc_order(gc, orient)
     crossings, semiarcs = linear_layout(gc, orient)
     return crossings, semiarcs
 
+
 def plain_semiarcs(semiarcs):
-    return [(a, b.value, c, d.value) for a,b,c,d in semiarcs]
+    return [(a, b.value, c, d.value) for a, b, c, d in semiarcs]
+
 
 def route(semiarcs):
-    top, bot = [], []
-    assert len(semiarcs)%2 == 0
+    """
+    Perform the actual algorithm itself.
+    """
 
+    # Initialize the stacks representing the upper / lower half-planes. We'll be
+    # pushing / popping semiarcs IDs (see: semiarc_map) to these stacks as we
+    # perform the algorithm.
+    upper, lower = [], []
+    assert len(semiarcs) % 2 == 0
+
+    # Create a dictionary for associating (crossing, dir) pairs with
+    # an abstract ID representing the semiarc
     semiarc_map = {}
+
+    # `a` = crossing a, `da` = exit  direction for `a`
+    # `b` = crossing b, `db` = enter direction for `b`
     for i, (a, da, b, db) in enumerate(semiarcs):
         semiarc_map[a, da] = semiarc_map[b, db] = i
 
+    # Check if the upper element is v
     def peek(l, v):
         return len(l) >= 1 and l[-1] == v
 
-    top_demiarcs = {}
-    bot_demiarcs = {}
+    # Initialize the dictionaries giving our semicircle positioning information.
+    #
+    # Keys: semiarc id's
+    #
+    # Values: a list of numbers. A protypical element x in this list encodes
+    #         information as follows:
+    #         - abs(x) gives the x coordinate of one of the endpoints of a
+    #           semicircle that's part of our arc of interest
+    #         - sign(x) describes whether we have an arc that's going out from
+    #           the horizontal line or returning to it. x < 0 --> returning,
+    #           x > 0 --> leaving.
+    upper_cs = {}
+    lower_cs = {}
 
     x = 1
-    def push_top(v):
-        top_demiarcs.setdefault(v, []).append(x)
-        top.append(v)
 
-    def push_bot(v):
-        bot_demiarcs.setdefault(v, []).append(x)
-        bot.append(v)
+    # In the below, in general, pushing a semiarc to stack corresponds to
+    # recording an x coordinate where it leaves the spine. Popping corresponds
+    # to recording an x coordinate where it returns to the spine. Note, x will
+    # be a variable in the outer scope when these functions are called.
+    def push_upper(s):
+        """
+        Pushes s (a semiarc ID, as obtained through semiarc_map) to the stack
+        representing the upper half-plane, and adds the current x value to the
+        list of associated x values for the semiarc. See the initialization
+        comment for `upper_cs` for more.
+        """
+        upper_cs.setdefault(s, []).append(x)
+        upper.append(s)
 
-    def pop_top(expect=None):
-        v = top.pop()
+    def push_lower(s):
+        lower_cs.setdefault(s, []).append(x)
+        lower.append(s)
+
+    def pop_upper(expect=None):
+        s = upper.pop()
         if expect is not None:
-            assert expect == v
-        top_demiarcs.setdefault(v, []).append(-x)
-        return v
+            assert expect == s
+        upper_cs.setdefault(s, []).append(-x)
+        return s
 
-    def pop_bot(expect=None):
-        v = bot.pop()
+    def pop_lower(expect=None):
+        s = lower.pop()
         if expect is not None:
-            assert expect == v
-        bot_demiarcs.setdefault(v, []).append(-x)
-        return v
+            assert expect == s
+        lower_cs.setdefault(s, []).append(-x)
+        return s
 
-    def push_or_pop_top(v):
-        if peek(top, v):
-            pop_top(v)
-        else:
-            push_top(v)
+    def push_or_pop_upper(s):
+        """
+        If s is the top element of upper, pop it off.
 
-    def push_or_pop_bot(v):
-        if peek(bot, v):
-            pop_bot(v)
+        Else, push it on.
+        """
+        if peek(upper, s):
+            pop_upper(s)
         else:
-            push_bot(v)
+            push_upper(s)
+
+    def push_or_pop_lower(s):
+        if peek(lower, s):
+            pop_lower(s)
+        else:
+            push_lower(s)
 
     crossings = []
 
-    for i in range(1, len(semiarcs)//2 + 1):
+    # Each crossing appears in 4 semiarcs: in 2 as the start point, and in 2 as
+    # the endpoint. Hence, len(semiarcs) // 2 + 1 gives `max_crossing_number` +
+    # 1. So range(1, len(semiarcs) // 2 + 1) gives us an iterator for all the
+    # crossings.
+    #
+    # i = crossing number
+    for i in range(1, len(semiarcs) // 2 + 1):
+        # l is the ID of the semiarc entering crossing i from the left.
         l = semiarc_map[i, Dir.LEFT]
-        print(x, 1, bot, top[::-1], l)
+
+        print(x, 1, lower, upper[::-1], l)
+
         # If this assertion fails, we would need to push the semiarc.
         # (like for the first arc special case), but how do we know
         # which side to generate it on?
-        assert l in top or l in bot or not (top or bot)
+        assert l in upper or l in lower or not (upper or lower)
 
         # If this assertion fails, how do we determine which direction
         # to shift in and how much to shift?
-        assert (top + bot).count(l) <= 1
-        if l in top:
-            while not peek(top, l):
-                push_or_pop_bot(pop_top())
+        assert (upper + lower).count(l) <= 1
+
+        # If `l` has already been pushed to `upper` in the past, pop elements
+        # from `upper` and push them to `lower` until we reach `l`, and then pop
+        # `l`.
+        if l in upper:
+            while not peek(upper, l):
+                push_or_pop_lower(pop_upper())
                 x += 1
 
-            pop_top(l)
+            pop_upper(l)
 
-        elif l in bot:
-            while not peek(bot, l):
-                push_or_pop_top(pop_bot())
+        # The same for lower
+        elif l in lower:
+            while not peek(lower, l):
+                push_or_pop_upper(pop_lower())
                 x += 1
 
-            pop_bot(l)
+            pop_lower(l)
 
-        elif not (top or bot):
-            # Special case: we don't know anything so we hedge our
-            # bets and cleanup at the end
-            push_bot(l)
-            push_top(l)
+        # In the event that we're treating the first crossing, both stacks are
+        # empty. In this case we push to _both_, and clean up the issue at the
+        # end.
+        elif i == 1:
+            push_lower(l)
+            push_upper(l)
 
+        # We're now done processing the left strand for crossing i, so move to
+        # addressing the up/down strands. These are located one x value to the
+        # right of the left strand's endpoint.
         x += 1
 
+        # Get the semiarc IDs for the UP / DOWN strands
         u = semiarc_map[i, Dir.UP]
         d = semiarc_map[i, Dir.DOWN]
-        print(x, 2, bot, top[::-1], d, u)
-        push_or_pop_top(u)
-        push_or_pop_bot(d)
-        crossings.append(x)
+        print(x, 2, lower, upper[::-1], d, u)
+
+        push_or_pop_upper(u)
+        push_or_pop_lower(d)
+        crossings.append(x)  # up / down share same x as the crossing
 
         x += 1
 
+        # Process the rightward (exiting) strand for the crossing.
         r = semiarc_map[i, Dir.RIGHT]
-        print(x, 3, bot, top[::-1], r)
+        print(x, 3, lower, upper[::-1], r)
 
         # If this assertion fails, how will we know which side to pop
         # from? If we just choose an arbitrary side we won't fail to
         # be planar due to shifting, but we cannot guarantee
         # optimality.
-        assert not (peek(top, r) and peek(bot, r))
+        assert not (peek(upper, r) and peek(lower, r))
 
-        if peek(top, r):
-            pop_top(r)
-        elif peek(bot, r):
-            pop_bot(r)
+        if peek(upper, r):
+            pop_upper(r)
+        elif peek(lower, r):
+            pop_lower(r)
         else:
             # If this assertion fails, then it is because we are on
             # the last crossing, but we failed to find the final
             # semiarc.
-            assert (i+1, Dir.LEFT) in semiarc_map
-            l2 = semiarc_map[i+1, Dir.LEFT]
+            assert (i + 1, Dir.LEFT) in semiarc_map
+            l2 = semiarc_map[i + 1, Dir.LEFT]
 
             # If this assertion fails, how do we know which side to
             # push the semiarc on? If we just choose an arbitrary side
             # we won't fail to be planar due to shifting, but we
             # cannot guarantee optimality.
-            assert l2 in top + bot + [r]
+            assert l2 in upper + lower + [r]
 
             if l2 == r:
                 # Arbitrary decision, either choice is optimal.
-                push_top(r)
-            elif l2 in top:
-                push_bot(r)
-            elif l2 in bot:
-                push_top(r)
+                push_upper(r)
+            elif l2 in upper:
+                push_lower(r)
+            elif l2 in lower:
+                push_upper(r)
 
         x += 1
 
-    assert -1 <= len(top) - len(bot) <= 1
-    while top and bot:
-        print(bot, top[::-1])
-        assert pop_top() == pop_bot()
+    # The only things remaining in the stacks at this point should be
+    #   (a) the copy of the first crossing's left strand (recall we pushed it
+    #       once to each stack), and
+    #   (b) strands that go around the right endpoint of the spine.
+    # Hence, abs(len(upper) - len(lower)) <= 1.
+    assert abs(len(upper) - len(lower)) <= 1
+    while upper and lower:
+        print(lower, upper[::-1])
+        assert pop_upper() == pop_lower()
         x += 1
 
-    print(bot, top[::-1])
+    print(lower, upper[::-1])
 
-    # Cleanup the "leftover" return demiarc
-    if peek(top, semiarc_map[1, Dir.LEFT]):
-        top.pop()
-    elif peek(bot, semiarc_map[1, Dir.LEFT]):
-        bot.pop()
+    # Cleanup the "leftover" return c
+    if peek(upper, semiarc_map[1, Dir.LEFT]):
+        upper.pop()
+    elif peek(lower, semiarc_map[1, Dir.LEFT]):
+        lower.pop()
 
-    print(bot, top[::-1])
-    assert top == bot == []
+    print(lower, upper[::-1])
+
+    # Ensure that there's nothing else remaining to pop.
+    assert upper == lower == []
 
     # Honestly this probably shouldn't be an inner function
     def deparenthesize(seq):
+        """
+        Pair up endpoints for departing / returning to the spine
+        """
         result = []
         stack = []
         for x in seq:
@@ -324,39 +461,107 @@ def route(semiarcs):
             else:
                 y = stack.pop()
                 result.append((y, abs(x)))
-
         return result
 
-    top_demiarcs = {k:deparenthesize(v) for k, v in top_demiarcs.items()}
-    bot_demiarcs = {k:deparenthesize(v) for k, v in bot_demiarcs.items()}
+    upper_cs = {k: deparenthesize(v) for k, v in upper_cs.items()}
+    lower_cs = {k: deparenthesize(v) for k, v in lower_cs.items()}
 
-    return top_demiarcs, bot_demiarcs, crossings
+    return upper_cs, lower_cs, crossings
 
 
 if __name__ == "__main__":
     B = BraidGroup(4)
-    K = Knot(B([1,1,1]))
+    K = Knot(B([1, 1, 1]))
     # K = Knot(B([1,1,1,2,-1,2,-3,2,-3]))
 
     # K = Knot([[3,1,2,4], [8,9,1,7], [5,6,7,3], [4,18,6,5],
     #           [17,19,8,18], [9,10,11,14], [10,12,13,11],
     #           [12,19,15,13], [20,16,14,15], [16,20,17,2]])
 
-    K = Link([[[1,-2,-3,-8,-12,13,-14,15,-7,-1,2,-4,10,11,-13,12,
-                -11,-16,4,3,-5,6,-9,7,-15,14,16,-10,8,9,-6,5]],
-              [-1,-1,1,1,1,1,-1,1,1,-1,1,-1,-1,-1,-1,-1]])
+    K = Link(
+        [
+            [
+                [
+                    1,
+                    -2,
+                    -3,
+                    -8,
+                    -12,
+                    13,
+                    -14,
+                    15,
+                    -7,
+                    -1,
+                    2,
+                    -4,
+                    10,
+                    11,
+                    -13,
+                    12,
+                    -11,
+                    -16,
+                    4,
+                    3,
+                    -5,
+                    6,
+                    -9,
+                    7,
+                    -15,
+                    14,
+                    16,
+                    -10,
+                    8,
+                    9,
+                    -6,
+                    5,
+                ]
+            ],
+            [-1, -1, 1, 1, 1, 1, -1, 1, 1, -1, 1, -1, -1, -1, -1, -1],
+        ]
+    )
 
     # K = Knot([[[-1,2,-3,4,-5,6,-7,1,-4,8,-6,5,-8,3,-2,7]], [-1,-1,-1,-1,1,1,-1,-1]])
     # import gauss_codes
     # K = Knot(nelson_gc_to_sage_gc(gauss_codes.gknot[11,2]))
-    # K = Knot([[1,5,2,4],[3,8,4,9],[5,11,6,10],[14,7,15,8],[9,2,10,3],[18,12,19,11],[6,13,7,14],[22,15,23,16],[20,18,21,17],[12,20,13,19],[24,21,1,22],[16,23,17,24]])
-    # K = Knot([[4,2,5,1],[8,4,9,3],[12,9,1,10],[10,5,11,6],[6,11,7,12],[2,8,3,7]])
+    # K = Knot(
+    #     [
+    #         [1, 5, 2, 4],
+    #         [3, 8, 4, 9],
+    #         [5, 11, 6, 10],
+    #         [14, 7, 15, 8],
+    #         [9, 2, 10, 3],
+    #         [18, 12, 19, 11],
+    #         [6, 13, 7, 14],
+    #         [22, 15, 23, 16],
+    #         [20, 18, 21, 17],
+    #         [12, 20, 13, 19],
+    #         [24, 21, 1, 22],
+    #         [16, 23, 17, 24],
+    #     ]
+    # )
+    # K = Knot(
+    #     [
+    #         [4, 2, 5, 1],
+    #         [8, 4, 9, 3],
+    #         [12, 9, 1, 10],
+    #         [10, 5, 11, 6],
+    #         [6, 11, 7, 12],
+    #         [2, 8, 3, 7],
+    #     ]
+    # )
 
     # crossings, semiarcs = knot_to_layout(K)
     import gauss_codes
+
+    # gc = gauss_codes.conn_sum(gauss_codes.gknot[10, 132], gauss_codes.gknot[8, 19])
+    # gc = gauss_codes.conn_sum(gc, gauss_codes.gknot[6, 2], ind=10)
+    # gc = gauss_codes.conn_sum(gc, gauss_codes.gknot[8, 13], ind=5)
+    # K = Knot(nelson_gc_to_sage_gc(gc))
     K = Knot(nelson_gc_to_sage_gc(gauss_codes.gknot[10, 132]))
     crossings, semiarcs = knot_to_layout(K)
-    plot(*route(semiarcs), straight=0)
+
+    upper_cs, lower_cs, crossings = route(semiarcs)
+    plot(upper_cs, lower_cs, crossings, straight=0)
 
     # for name, n_gc in gauss_codes.gknot.items():
     #     print("="*10 + " " + str(name))
