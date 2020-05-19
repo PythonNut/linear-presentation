@@ -3,7 +3,19 @@ from enum import Enum
 import itertools as it
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+
+# For the step-by-step plotting garbage
 from copy import deepcopy
+from os import mkdir, listdir, chdir
+from os.path import isdir
+
+import gauss_codes
+
+# For the parallel compilation
+from multiprocessing import Pool
+
+# For executing the compile command
+from subprocess import run
 
 
 class Dir(Enum):
@@ -519,20 +531,22 @@ def route(semiarcs):
     return upper_cs, lower_cs, crossings, states
 
 
-def crossing_tex(cnum, orient, x):
+def crossing_tex(cnum, orient, x, xcurr):
     """
     `cnum`: an int representing which crossing we're drawing. cnum < 0
             corresponds to the horizontal strand being an understrand,
             cnum > 0 is the same but an overstrand.
     `orient`: either +1 or -1, corresponding to positive, negative
               crossings respectively.
-    `x`: the x value where we're drawing things.
+    `x`: the x value where we're drawing our crossing.
+    `xcurr`: the x value for the vertical dashed line
     """
     out_str = ""
 
     if cnum < 0:
-        out_str += f"    \\draw ({x - .5}, 0) -- ({x - .1}, 0);\n"
+        out_str += f"    \\draw ({x - 1}, 0) -- ({x - .1}, 0);\n"
         out_str += f"    \\draw[-latex] ({x + .1}, 0) -- ({x + .5}, 0);\n"
+        out_str += f"    \\draw ({x + .5}, 0) -- ({x + 1}, 0);\n"
         if orient == 1:
             out_str += f"    \\draw[-latex] ({x}, .5) -- ({x}, -.5);\n"
         elif orient == -1:
@@ -540,7 +554,7 @@ def crossing_tex(cnum, orient, x):
         else:
             assert False
     else:
-        out_str += f"    \\draw[-latex] ({x - .5}, 0) -- ({x + .5}, 0);\n"
+        out_str += f"    \\draw[-latex] ({x -1}, 0) -- ({x + 1}, 0);\n"
         if orient == 1:
             out_str += f"    \\draw ({x}, -.5) -- ({x}, -.1);\n"
             out_str += f"    \\draw[-latex] ({x}, .1) -- ({x}, .5);\n"
@@ -602,7 +616,7 @@ def get_thalf(x0, x1, xcurr):
     return gp(180 * arccos(arg) / pi)  # convert to degrees and cast to float
 
 
-def arc_tex(x0, x1, xcurr, y, s):
+def arc_tex(x0, x1, xcurr, y, s, x0_through=False, x1_through=False):
     """
 
     """
@@ -611,7 +625,6 @@ def arc_tex(x0, x1, xcurr, y, s):
     xavg = (x1 + x0) / 2
 
     if y > 0:
-
         if xcurr < x1:
             nstyle = ", opacity=.2"
         else:
@@ -659,14 +672,23 @@ def arc_tex(x0, x1, xcurr, y, s):
         # Find the angle to draw until such that our arc meets the
         # dotted line
         thalf = get_thalf(x0, x1, xcurr)
-        # thalf = arctan()
-
         out_str += f"    \\draw[opacity=.6] ({x0},  {y}) arc ({t0}:{thalf}:{r});\n"
         out_str += f"    \\draw[opacity=.2] ({x1},  {y}) arc ({t1}:{thalf}:{r});\n"
-        pass
 
     else:
         out_str += f"    \\draw ({x0}, {y}) arc ({t0}:{t1}:{r});\n"
+
+    if x0_through:
+        if xcurr < x0:
+            out_str += f"\\draw[opacity=.2] ({x0}, {y}) -- ({x0}, 0);\n"
+        else:
+            out_str += f"\\draw ({x0}, {y}) -- ({x0}, 0);\n"
+
+    if x1_through:
+        if xcurr < x1:
+            out_str += f"\\draw[opacity=.2] ({x1}, {y}) -- ({x1}, 0);\n"
+        else:
+            out_str += f"\\draw ({x1}, {y}) -- ({x1}, 0);\n"
 
     return out_str
 
@@ -705,7 +727,7 @@ def stacks_tex(upper, lower, nmax):
     return out_str
 
 
-def plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f):
+def plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f, dirname):
     """
     Plot a single step in the execution of the algorithm.
 
@@ -718,7 +740,7 @@ def plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f):
                     the end of `route()`. `_f` is for "final"
 
     """
-    fname = f"test/step-{i:03}.tex"
+    fname = f"{dirname}/{i:03}.tex"
 
     nmax = len(gc) // 2
     # print(gc, len(gc), nmax)
@@ -740,7 +762,7 @@ def plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f):
     while len(seen_cs) < num_cs_so_far:
         c = gc[i]
         if abs(c) not in seen_cs:
-            out_str += crossing_tex(c, orient[len(seen_cs)], crossings[len(seen_cs)])
+            out_str += crossing_tex(c, orient[len(seen_cs)], crossings[len(seen_cs)], x)
             seen_cs.add(abs(c))
         i += 1
 
@@ -752,7 +774,9 @@ def plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f):
     while i < len(crossings_f):
         c = gc[i]
         if abs(c) not in seen_cs:
-            out_str += crossing_tex(c, orient[len(seen_cs)], crossings_f[len(seen_cs)])
+            out_str += crossing_tex(
+                c, orient[len(seen_cs)], crossings_f[len(seen_cs)], x
+            )
             seen_cs.add(abs(c))
         i += 1
 
@@ -770,38 +794,64 @@ def plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f):
             if x0 > x1:
                 (x0, x1) = (x1, x0)
 
+            # Check wheter we need to draw the arc down through the horizontal
+            if x0 in crossings_f:
+                x0_t = False
+            else:
+                x0_t = True
+
+            if x1 in crossings_f:
+                x1_t = False
+            else:
+                x1_t = True
+
             # If not in the special case, do the regular call
             if upper_cs_f[s] != []:
-                out_str += arc_tex(x0, x1, x, 0.5, s)
+                out_str += arc_tex(x0, x1, x, 0.5, s, x0_through=x0_t, x1_through=x1_t)
 
-            # else:  # Otherwise, ensure it's drawn in gray by taking x
-            #     # = 0
-            #     out_str += arc_tex(x0, x1, 0, 0.5, s)
-    # out_str +=
-    # for s in lower_cs_f.keys():
-    #     # Special case for if we get the first arc
-    #     if lower_cs_f[s] == []:
-    #         pairs = upper_cs_f[s]
-    #     else:
-    #         pairs = lower_cs_f[s]
+    out_str += "\\begin{scope}[yscale=-1]"
+    for s in lower_cs_f.keys():
+        # Special case for if we get the first arc
+        if lower_cs_f[s] == []:
+            pairs = upper_cs_f[s]
+        else:
+            pairs = lower_cs_f[s]
 
-    #     for (x0, x1) in pairs:
-    #         if x0 > x1:
-    #             (x0, x1) = (x1, x0)
+        for (x0, x1) in pairs:
+            if x0 > x1:
+                (x0, x1) = (x1, x0)
 
-    #         # If not in the special case, do the regular call
-    #         if lower_cs_f[s] != []:
-    #             out_str += arc_tex(x0, x1, x, -0.5, s)
+            # Check wheter we need to draw the arc down through the horizontal
+            if x0 in crossings_f:
+                x0_t = False
+            else:
+                x0_t = True
 
+            if x1 in crossings_f:
+                x1_t = False
+            else:
+                x1_t = True
+
+            # If not in the special case, do the regular call
+            if lower_cs_f[s] != []:
+                out_str += arc_tex(x0, x1, x, 0.5, s, x0_through=x0_t, x1_through=x1_t)
+
+    out_str += "\\end{scope}"
     out_str += "  \\end{tikzpicture}\n\\end{document}"
     with open(fname, "w") as f:
         f.write(out_str)
 
 
-if __name__ == "__main__":
-    import gauss_codes
+def build_frames(gkey):
+    """
+    gkey: an index into gauss_codes.gknot
+    """
+    cn, ind = gkey
+    dirname = f"{cn}-{ind}"
+    if not isdir(dirname):
+        mkdir(dirname)
 
-    [gc], orient = nelson_gc_to_sage_gc(gauss_codes.gknot[10, 132])
+    [gc], orient = nelson_gc_to_sage_gc(gauss_codes.gknot[gkey])
 
     K = Knot([[gc], orient])
     crossings, semiarcs = knot_to_layout(K)
@@ -810,4 +860,85 @@ if __name__ == "__main__":
     # draw it all in gray.
     upper_cs_f, lower_cs_f, crossings_f, states = route(semiarcs)
     for i, state in enumerate(states):
-        plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f)
+        plot_one_step(
+            gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f, dirname
+        )
+
+
+def compile_single_file(fname):
+
+    # run(["pdflatex", fname])
+    run(
+        [
+            # "true",
+            # "|",
+            # ":",
+            # "|",
+            "pdflatex",
+            "-halt-on-error",
+            fname,
+            "|",
+            "grep",
+            "'^!.*'",
+            "-A200",
+            "--color=always",
+        ]
+    )
+
+
+def convert_single_file(fname):
+    pdf = fname
+    png = pdf[:-4] + ".png"
+    run(
+        [
+            "convert",
+            "-density",
+            "300",
+            "-depth",
+            "8",
+            pdf,
+            "-flatten",
+            "-quality",
+            "90",
+            png,
+        ]
+    )
+
+
+def compile_all():
+    tex_files = [fname for fname in listdir() if ".tex" in fname]
+    with Pool(5) as p:
+        p.map(compile_single_file, tex_files)
+
+
+def amalgamate(dirname, gif=True, re_png=False):
+    if gif:
+        if re_png:
+            pdf_files = [fname for fname in listdir() if ".pdf" in fname]
+            with Pool(5) as p:
+                p.map(convert_single_file, pdf_files)
+
+        run(
+            [
+                "convert",
+                "-layers",
+                "OptimizePlus",
+                "-delay",
+                "30",
+                "*.png",
+                "-loop",
+                "0",
+                f"{dirname}.gif",
+            ]
+        )
+
+
+if __name__ == "__main__":
+    gkey = (10, 132)
+    cn, ind = gkey
+    dirname = f"{cn}-{ind}"
+    # build_frames(gkey)
+    chdir(dirname)
+    # compile_all()
+    amalgamate(dirname)
+    chdir("..")
