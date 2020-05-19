@@ -648,7 +648,7 @@ def arc_tex(x0, x1, xcurr, y, s, x0_through=False, x1_through=False):
     # Handle the arcs that connect things directly along the horizontal
     if r == 0.5:
         if xcurr < x0:
-            out_str += f"    \draw[opacity=.2] ({x0-.5}, 0) -- ({x1+.5}, 0);\n"
+            out_str += f"    \\draw[opacity=.2] ({x0-.5}, 0) -- ({x1+.5}, 0);\n"
         elif x1 < xcurr:
             out_str += f"    \\draw ({x0 - .5}, 0) -- ({x1 + .5}, 0);\n"
         else:
@@ -719,7 +719,7 @@ def stacks_tex(upper, lower, nmax):
         h += 0.75
         out_str += f"    \\node () at (-1.5, {h}) " + "{\\small " + str(s) + "};\n"
 
-    for (h, s) in enumerate(upper):
+    for (h, s) in enumerate(lower):
         h /= 2
         h += 0.75
         out_str += f"    \\node () at (-1.5, -{h}) " + "{\\small " + str(s) + "};\n"
@@ -771,7 +771,7 @@ def plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f, dir
 
     # Ok now we draw the remaining crossings in gray
     out_str += "    \\begin{scope}[every path/.style={opacity=.2}, every node/.style={opacity=.2}]\n"
-    while i < len(crossings_f):
+    while i < len(gc):
         c = gc[i]
         if abs(c) not in seen_cs:
             out_str += crossing_tex(
@@ -890,18 +890,7 @@ def convert_single_file(fname):
     pdf = fname
     png = pdf[:-4] + ".png"
     run(
-        [
-            "convert",
-            "-density",
-            "300",
-            "-depth",
-            "8",
-            pdf,
-            "-flatten",
-            "-quality",
-            "90",
-            png,
-        ]
+        ["convert", "-density", "300", pdf, "-flatten", "-quality", "96", png,]
     )
 
 
@@ -911,13 +900,14 @@ def compile_all():
         p.map(compile_single_file, tex_files)
 
 
-def amalgamate(dirname, gif=True, re_png=False):
-    if gif:
-        if re_png:
-            pdf_files = [fname for fname in listdir() if ".pdf" in fname]
-            with Pool(5) as p:
-                p.map(convert_single_file, pdf_files)
+def amalgamate(dirname, re_png=False, gif=False, mp4=True):
 
+    if re_png:
+        pdf_files = [fname for fname in listdir() if ".pdf" in fname]
+        with Pool(5) as p:
+            p.map(convert_single_file, pdf_files)
+    if gif:
+        gif_name = f"{dirname}.gif"
         run(
             [
                 "convert",
@@ -928,17 +918,33 @@ def amalgamate(dirname, gif=True, re_png=False):
                 "*.png",
                 "-loop",
                 "0",
-                f"{dirname}.gif",
+                gif_name,
+            ]
+        )
+    if mp4:
+        mov_name = f"{dirname}.mp4"
+        run(
+            [
+                "ffmpeg",
+                "-r",
+                "5",
+                "-i",
+                "%03d.png",
+                "-vcodec",
+                "libx264",
+                "-y",
+                "-an",
+                mov_name,
             ]
         )
 
 
 if __name__ == "__main__":
-    gkey = (10, 132)
+    gkey = (7, 2)
     cn, ind = gkey
     dirname = f"{cn}-{ind}"
-    # build_frames(gkey)
+    build_frames(gkey)
     chdir(dirname)
-    # compile_all()
-    amalgamate(dirname)
+    compile_all()
+    amalgamate(dirname, re_png=True)
     chdir("..")
