@@ -702,24 +702,24 @@ def stacks_tex(upper, lower, nmax):
     out_str = ""
 
     # Upper stack
-    out_str += f"    \\draw[thick] (-2, {nmax/2+.5}) -- (-2, .5) -- (-1, .5) -- (-1, {nmax/2+.5});\n"
+    out_str += f"    \\draw[thick] (-2, .5) -- (-2, {nmax/2+.5}) -- (-1, {nmax/2+.5}) -- (-1, .5) ;\n"
     # Lower stack
-    out_str += f"    \\draw[thick] (-2, -{nmax/2+.5}) -- (-2, -.5) -- (-1, -.5) -- (-1, -{nmax/2+.5});\n"
+    out_str += f"    \\draw[thick] (-2, -.5) -- (-2, -{nmax/2+.5}) -- (-1, -{nmax/2+.5}) -- (-1, -.5) ;\n"
 
     # Draw the horizontal lines demarking parts of the stack
     out_str += "    \\draw "
-    for h in range(nmax):
+    for h in range(1, nmax):
         h /= 2
         h += 0.5
         out_str += f"(-2, {h}) -- (-1, {h}) (-2, -{h}) -- (-1, -{h})"
     out_str += ";\n"
 
-    for (h, s) in enumerate(upper):
+    for (h, s) in enumerate(upper[::-1]):
         h /= 2
         h += 0.75
         out_str += f"    \\node () at (-1.5, {h}) " + "{\\small " + str(s) + "};\n"
 
-    for (h, s) in enumerate(lower):
+    for (h, s) in enumerate(lower[::-1]):
         h /= 2
         h += 0.75
         out_str += f"    \\node () at (-1.5, -{h}) " + "{\\small " + str(s) + "};\n"
@@ -927,7 +927,7 @@ def amalgamate(dirname, re_png=False, gif=False, mp4=True):
             [
                 "ffmpeg",
                 "-r",
-                "5",
+                "2",
                 "-i",
                 "%03d.png",
                 "-vcodec",
