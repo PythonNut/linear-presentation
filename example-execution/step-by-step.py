@@ -592,26 +592,82 @@ def crossing_tex(cnum, orient, x):
     return out_str
 
 
-def arc_tex(x0, x1, is_upper, s):
+def get_thalf(x0, x1, xcurr):
     """
-    `x0`: the `x` value for the start point
-    `x1`: the `x` value for the end   point
-    `is_upper`: a bool indicating whether this arc is in the upper or
-                lower half of the plane.
-    `s`: the semiarc label
+    Given x0 <= xcurr <= x1, compute which theta in [0,180] yields
+    xcurr when we take ((x1 - x0)/2)*cos(theta)
     """
-    lr = sign(x0 - x1)
-    r = abs(x0 - x1)
-    if is_upper:
-        if lr > 0:
-            out_str = f"    \\draw ({x0}, .5) arc (0:180:{r});\n"
+    xavg = (x0 + x1) / 2
+    arg = 2 * (xcurr - xavg) / (x1 - x0)
+    return gp(180 * arccos(arg) / pi)  # convert to degrees and cast to float
+
+
+def arc_tex(x0, x1, xcurr, y, s):
+    """
+
+    """
+    out_str = ""
+    r = abs(x0 - x1) / 2
+    xavg = (x1 + x0) / 2
+
+    if y > 0:
+
+        if xcurr < x1:
+            nstyle = ", opacity=.2"
         else:
-            out_str = f"    \\draw ({x0}, .5) arc (180:0:{r});\n"
+            nstyle = ""
+
+        if r == 0.5:
+            out_str += (
+                f"    \\node[above{nstyle}] ({s}lab) at ({xavg}, 0) "
+                + "{"
+                + str(s)
+                + "};\n"
+            )
+        else:
+            out_str += (
+                f"    \\node[above{nstyle}] ({s}lab) at ({(x1+x0)/2}, {r+.5}) "
+                + "{"
+                + str(s)
+                + "};\n"
+            )
+
+    # Handle the arcs that connect things directly along the horizontal
+    if r == 0.5:
+        if xcurr < x0:
+            out_str += f"    \draw[opacity=.2] ({x0-.5}, 0) -- ({x1+.5}, 0);\n"
+        elif x1 < xcurr:
+            out_str += f"    \\draw ({x0 - .5}, 0) -- ({x1 + .5}, 0);\n"
+        else:
+            out_str += f"    \\draw ({x0 - .5}, 0) -- ({xcurr}, 0);\n"
+            out_str += f"    \\draw[opacity=.2] ({xcurr}, 0) -- ({x1 + .5}, 0);\n"
+        return out_str
+
+    if x0 < x1:
+        t0 = 180
+        t1 = 0
     else:
-        if lr > 0:
-            out_str = f"    \\draw ({x0}, -.5) arc (0:-180:{r});\n"
-        else:
-            out_str = f"    \\draw ({x0}, -.5) arc (180:360:{r});\n"
+        t0 = 0
+        t1 = 180
+
+    if xcurr < x0:
+        out_str += f"    \\draw[opacity=.2] ({x0}, {y}) arc ({t0}:{t1}:{r});\n"
+        # print(x0, x1, xcurr, y, s)
+        # assert False
+
+    elif xcurr < x1:
+        # Find the angle to draw until such that our arc meets the
+        # dotted line
+        thalf = get_thalf(x0, x1, xcurr)
+        # thalf = arctan()
+
+        out_str += f"    \\draw[opacity=.6] ({x0},  {y}) arc ({t0}:{thalf}:{r});\n"
+        out_str += f"    \\draw[opacity=.2] ({x1},  {y}) arc ({t1}:{thalf}:{r});\n"
+        pass
+
+    else:
+        out_str += f"    \\draw ({x0}, {y}) arc ({t0}:{t1}:{r});\n"
+
     return out_str
 
 
@@ -653,14 +709,19 @@ def plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f):
     """
     Plot a single step in the execution of the algorithm.
 
+    `gc`: Together with `orient`, comprises the sage-format gauss code
+    `orient`: see above
     `state`: a single entry in the `states` list defined in `route()`.
     `i`: the current step of the computation. Used to generate the
          filename.
+    `<whatever>_f`: the version of <whatever> that gets spat out at
+                    the end of `route()`. `_f` is for "final"
+
     """
     fname = f"test/step-{i:03}.tex"
 
     nmax = len(gc) // 2
-    print(gc, len(gc), nmax)
+    # print(gc, len(gc), nmax)
 
     out_str = r"""\documentclass[border=1pt]{standalone}
 \usepackage{tikz}
@@ -668,8 +729,8 @@ def plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f):
   \begin{tikzpicture}
     """
     x, upper, lower, upper_cs, lower_cs, crossings = state
-
-    out_str += f"    \\draw[dotted] ({x}, -{nmax}) -- ({x}, {nmax});\n"
+    print(state)
+    out_str += f"    \\draw[dotted] ({x}, -{2*nmax}) -- ({x}, {2*nmax});\n"
 
     num_cs_so_far = len(crossings)
 
@@ -686,7 +747,7 @@ def plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f):
     # Draw the stacks
     out_str += stacks_tex(upper, lower, nmax)
 
-    # Ok now we draw in gray
+    # Ok now we draw the remaining crossings in gray
     out_str += "    \\begin{scope}[every path/.style={opacity=.2}, every node/.style={opacity=.2}]\n"
     while i < len(crossings_f):
         c = gc[i]
@@ -697,6 +758,41 @@ def plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f):
 
     out_str += "    \\end{scope}"
 
+    # Now we draw the semicircles
+    for s in upper_cs_f.keys():
+        # Special case for if we get the first arc
+        if upper_cs_f[s] == []:
+            pairs = lower_cs_f[s]
+        else:
+            pairs = upper_cs_f[s]
+
+        for (x0, x1) in pairs:
+            if x0 > x1:
+                (x0, x1) = (x1, x0)
+
+            # If not in the special case, do the regular call
+            if upper_cs_f[s] != []:
+                out_str += arc_tex(x0, x1, x, 0.5, s)
+
+            # else:  # Otherwise, ensure it's drawn in gray by taking x
+            #     # = 0
+            #     out_str += arc_tex(x0, x1, 0, 0.5, s)
+    # out_str +=
+    # for s in lower_cs_f.keys():
+    #     # Special case for if we get the first arc
+    #     if lower_cs_f[s] == []:
+    #         pairs = upper_cs_f[s]
+    #     else:
+    #         pairs = lower_cs_f[s]
+
+    #     for (x0, x1) in pairs:
+    #         if x0 > x1:
+    #             (x0, x1) = (x1, x0)
+
+    #         # If not in the special case, do the regular call
+    #         if lower_cs_f[s] != []:
+    #             out_str += arc_tex(x0, x1, x, -0.5, s)
+
     out_str += "  \\end{tikzpicture}\n\\end{document}"
     with open(fname, "w") as f:
         f.write(out_str)
@@ -705,8 +801,8 @@ def plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f):
 if __name__ == "__main__":
     import gauss_codes
 
-    [gc], orient = nelson_gc_to_sage_gc(gauss_codes.gknot[3, 1])
-    print(gc, orient)
+    [gc], orient = nelson_gc_to_sage_gc(gauss_codes.gknot[10, 132])
+
     K = Knot([[gc], orient])
     crossings, semiarcs = knot_to_layout(K)
 
