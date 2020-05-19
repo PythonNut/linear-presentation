@@ -124,3 +124,16 @@ dmypy.json
 .pyre/
 
 /tests
+
+
+# TeX garbage
+*.aux
+*.log
+*.out
+
+# Test directory for step-by-step.py
+example-execution/test/*.tex
+example-execution/test/*.pdf
+
+# Emacs auto-generated files
+**/auto/*
