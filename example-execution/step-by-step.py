@@ -550,7 +550,7 @@ def crossing_tex(cnum, orient, x, xcurr):
         if orient == 1:
             out_str += f"    \\draw[-latex] ({x}, .5) -- ({x}, -.5);\n"
         elif orient == -1:
-            out_str += f"    \\draw[-latex] ({x}, .5) -- ({x}, -.5);\n"
+            out_str += f"    \\draw[-latex] ({x}, -.5) -- ({x}, .5);\n"
         else:
             assert False
     else:
@@ -633,16 +633,16 @@ def arc_tex(x0, x1, xcurr, y, s, x0_through=False, x1_through=False):
         if r == 0.5:
             out_str += (
                 f"    \\node[above{nstyle}] ({s}lab) at ({xavg}, 0) "
-                + "{"
+                + "{$s_{"
                 + str(s)
-                + "};\n"
+                + "}$};\n"
             )
         else:
             out_str += (
                 f"    \\node[above{nstyle}] ({s}lab) at ({(x1+x0)/2}, {r+.5}) "
-                + "{"
+                + "{$s_{"
                 + str(s)
-                + "};\n"
+                + "}$};\n"
             )
 
     # Handle the arcs that connect things directly along the horizontal
@@ -717,12 +717,16 @@ def stacks_tex(upper, lower, nmax):
     for (h, s) in enumerate(upper[::-1]):
         h /= 2
         h += 0.75
-        out_str += f"    \\node () at (-1.5, {h}) " + "{\\small " + str(s) + "};\n"
+        out_str += (
+            f"    \\node () at (-1.5, {h}) " + "{\\small $s_{" + str(s) + "}$};\n"
+        )
 
     for (h, s) in enumerate(lower[::-1]):
         h /= 2
         h += 0.75
-        out_str += f"    \\node () at (-1.5, -{h}) " + "{\\small " + str(s) + "};\n"
+        out_str += (
+            f"    \\node () at (-1.5, -{h}) " + "{\\small $s_{" + str(s) + "}$};\n"
+        )
 
     return out_str
 
