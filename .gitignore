@@ -132,8 +132,7 @@ dmypy.json
 *.out
 
 # Test directory for step-by-step.py
-example-execution/test/*.tex
-example-execution/test/*.pdf
+example-execution/**
 
 # Emacs auto-generated files
 **/auto/*
