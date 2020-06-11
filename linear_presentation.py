@@ -1,881 +1,570 @@
-# ============================================================================ #
-#                                                                              #
-#                              Linear Presentation                             #
-#                                                                              #
-# ============================================================================ #
-#
-#
-# ---------------------------------------------------------------------------- #
-#                                                                              #
-#                     ┌───────────┐                                            #
-#                     │           │                                            #
-#        ┌───┐        │   ┌───┐   │                                            #
-#        │   │        │   │   │   │                                            #
-#    ┌───────┘    ┌───│───────│───┘                                            #
-#    │   │        │   │   │   │                                                #
-#    └───┘        │   └───┘   │                                                #
-#                 │           │                                                #
-#                 └───────────┘                                                #
-#                                                                              #
-# ---------------------------------------------------------------------------- #
-#
-# If you want to build your own, try these
-# ┌ └ ┐ ┘ ├ ┤ ┬ ┴ ┼ │ ─
-
+from sage.all import *
+from enum import Enum
 import itertools as it
-from gauss_codes import gknot, conn_sum
-import os, math
-import networkx as nx
+import matplotlib.pyplot as plt
+import matplotlib as mpl
 
 
-################################################################################
-#                                                                              #
-#                               Helper Functions                               #
-#                                                                              #
-################################################################################
+class Dir(Enum):
+    UP = 0
+    RIGHT = 1
+    DOWN = 2
+    LEFT = 3
+
+    def flip(self):
+        """
+        Perform one of
+              UP <-> DOWN
+            LEFT <-> RIGHT
+        depending on the current value.
+        """
+        return Dir((self.value + 2) % 4)
 
 
-def rotate_right(l, n):
-    return l[-n:] + l[:-n]
-
-
-def irotate_right(l, n):
-    return it.chain(l[-n:], l[:-n])
-
-
-def sign(i):
+def fix_gc_order(gc, orient):
     """
-    FIXME why is there a return 0?
+    If there exist i,j with i < j such that crossing j is encountered before
+    crossing i, we say the gauss code is improperly ordered.
+
+    This function relabels the gauss code to fix that.
     """
-    if i > 0:
-        return 1
-    elif i < 0:
-        return -1
-    return 0
+    new_gc = []
+    mapping = {}  # Initialize the mapping from "old" -> "new" labels
+
+    for elt in gc:
+        c, s = abs(elt), sign(elt)  # "sign" gives over/under info
+        if c not in mapping:
+            mapping[c] = len(mapping) + 1  # relabel by order of encounter
+        new_c = mapping[c]
+        new_gc.append(new_c * s)
+
+    rev_mapping = {v: k for k, v in mapping.items()}
+    assert len(rev_mapping) == len(mapping)
+    new_orient = [orient[rev_mapping[c] - 1] for c in range(1, len(mapping) + 1)]
+
+    return new_gc, new_orient
 
 
-def get_cnum(c):
+def linear_layout(gc, orient):
     """
-    Extract the crossing number corresponding to an entry in a gauss code.
+    Given the sage-format gauss code (gc, orient) as input, construct and return
 
-    Args:
+      1. `crossings`, a dictionary indexed by crossing number with values an
+         associated "connection information" dictionary. Basically, the
+         dictionary for crossing `i` has
 
-    Crossings in our gauss code are formatted like
+           a) keys: the [RIGHT, UP, LEFT, DOWN] strands involved in crossing `i`
 
-    (+/-) (crossing number).(0/0.5)
+           b) values: the other endpoint of said strand, represented as a tuple
+              (j, DIR), where j is the crossing number of the endpoint, and DIR
+              describes which of [RIGHT, UP, LEFT, DOWN] this strand is for
+              crossing j.
 
-    where (+) indicates we're on an overstrand, (-) indicates we're on an
-    understrand, a trailing (.0) indicates the crossing is positive, and a
-    trailing (.5) indicates the crossing is negative.
+      2. `semiarcs`, a list of tuples of the form (i, DIR_i, j, DIR_j),
+         representing all of the oriented semiarcs appearing in our diagram.
     """
+    n = max(gc)
+    crossings = {i: {} for i in range(1, n + 1)}
+    semiarcs = []
 
-    if c < 0:
-        if c % 1 != 0:
-            c += 0.5
-    else:
-        if c % 1 != 0:
-            c -= 0.5
+    # Add crossing 1 and the outgoing direction manually.
+    seen = set([1])
+    exit_dir = Dir.RIGHT
 
-    return int(abs(c))
+    # Iterate through all subsequent pairs of characters in the gauss code,
+    # which essentially gets us all semiarcs directly.
+    for a, b in zip(gc, gc[1:]):
+        # The way the algorithm works, whenever we see a new crossing for the
+        # first time, we always orient the incoming strand to lie on the
+        # horizontal line. This corresponds to coming in from the LEFT.
+        if abs(b) not in seen:
+            entry_dir = Dir.LEFT
 
+        # Otherwise, we check to see whether
+        #  - `b` is positive and we're entering on an overstrand, or
+        #  - `b` is negative and we're entering on an understarnd.
+        # In both these cases, the entering strand comes in from the top.
+        elif sign(b) == orient[abs(b) - 1]:
+            entry_dir = Dir.UP
 
-def decompose_c(c):
-    """
-    In our initial path construction, routes can take many shapes:
-
-         ┌──┐           ┌───────┐
-         │  │           │       │
-    x    │  y           x       y
-    │    │
-    └────┘
-
-    Note, we can decompose all of these paths into c shapes
-
-    """
-    over_under = 1 if c > 0 else -1
-    c = abs(c)
-    pos_neg = 1 if c % 1 == 0 else -1
-    cnum = int(abs(c))
-    return cnum, over_under, pos_neg
-
-
-def recompose_c(cnum, over_under, pos_neg):
-    if pos_neg == -1:
-        cnum += 0.5
-    if over_under == -1:
-        cnum *= -1
-    return cnum
-
-
-def get_y_in(cross_seen, c):
-    """
-    Get the incident y value corresponding to the term
-    """
-    if not cross_seen:
-        return 0
-
-    if c < 0:
-        if c % 1 != 0:
-            # vertical understrand, negative crossing
-            #
-            #      y
-            #      |
-            #
-            # ----------->
-            #
-            #      |
-            #      v
-            #
-            c_y = 1
+        # Only remaining case is entering from the bottom
         else:
-            # vertical understrand, positive crossing
-            #
-            #      ^
-            #      |
-            #
-            # ----------->
-            #
-            #      |
-            #      y
-            c_y = -1
-    else:
-        if c % 1 != 0:
-            # vertical overstrand, negative crossing
-            #
-            #      ^
-            #      |
-            #      |
-            # ---- | ---->
-            #      |
-            #      |
-            #      y
-            #
-            c_y = -1
+            entry_dir = Dir.DOWN
+
+        crossings[abs(a)][exit_dir] = (abs(b), entry_dir)
+        crossings[abs(b)][entry_dir] = (abs(a), exit_dir)
+        semiarcs.append((abs(a), exit_dir, abs(b), entry_dir))
+        seen.add(abs(a))
+        exit_dir = entry_dir.flip()  # Exit opposite of the way we came in
+
+    # Manually add the incoming connection for crossing 1
+    crossings[abs(b)][exit_dir] = (1, Dir.LEFT)
+    crossings[1][Dir.LEFT] = (abs(b), exit_dir)
+    semiarcs.append((abs(b), exit_dir, abs(1), Dir.LEFT))
+
+    return crossings, semiarcs
+
+
+def unpack_paths(paths, n, bound, m):
+    result = []
+    for i in range(n):
+        path = [paths[i, j] for j in range(m) if paths[i, j] > 0]
+        result.append(path)
+    return result
+
+
+def compact_paths(paths, crossings=[]):
+    all_points = []
+    for path in paths:
+        all_points.extend(path)
+
+    all_points = sorted(set(all_points))
+    result = []
+    for path in paths:
+        new_semiarc = [all_points.index(x) for x in path]
+        result.append(new_semiarc)
+
+    new_crossings = [all_points.index(x) for x in crossings]
+    return result, new_crossings
+
+
+def plot(upper_cs, lower_cs, crossings=[], straight=0):
+    def c_height(cs):
+        all_arcs = []
+        for arcs in cs.values():
+            all_arcs.extend(arcs)
+
+        dominate = {}
+
+        for a, b in all_arcs:
+            for c, d in all_arcs:
+                if a < c < d < b:
+                    dominate.setdefault((a, b), []).append((c, d))
+
+        height = {}
+        for a, b in sorted(all_arcs, key=lambda t: len(dominate.get(t, []))):
+            height[a, b] = 0
+            for dominated in dominate.get((a, b), []):
+                height[a, b] = max(height[a, b], height[dominated])
+
+            if b - a > 1:
+                height[a, b] += 1
+
+        return height
+
+    upper_heights = c_height(upper_cs)
+    lower_heights = c_height(lower_cs)
+
+    def add_arc(a, b, y=0, down=False):
+        h = abs(a - b)
+        if straight >= 3:
+            if down:
+                h = lower_heights[a, b]
+            else:
+                h = upper_heights[a, b]
+
+        if straight >= 1 and abs(a - b) <= 1:
+            plt.plot([a, b], [0, 0], "k")
+
+        elif straight >= 2:
+            if down:
+                plt.plot([a, a, b, b], [0, -h, -h, 0], "k")
+            else:
+                plt.plot([a, a, b, b], [0, h, h, 0], "k")
+
         else:
-            # vertical overstrand, positive crossing
-            #
-            #      y
-            #      |
-            #      |
-            # ---- | ---->
-            #      |
-            #      |
-            #      v
-            #
-            c_y = 1
+            c = (a + b) / 2
+            if down:
+                plt.gca().add_patch(mpl.patches.Arc((c, y), h, h, theta1=180))
+            else:
+                plt.gca().add_patch(mpl.patches.Arc((c, y), h, h, theta2=180))
 
-    return c_y
+    for arcs in upper_cs.values():
+        for (a, b) in arcs:
+            add_arc(a, b, 0, False)
+
+    for arcs in lower_cs.values():
+        for (a, b) in arcs:
+            add_arc(a, b, 0, True)
+
+    # for i, path in enumerate(paths):
+    #     par = parity[i]
+    #     for j, (a, b) in enumerate(zip(path, path[1:])):
+    #         add_arc(a, b, 0, (par + j) % 2 == 0)
+
+    for x in crossings:
+        plt.plot([x - 1, x + 1], [0, 0], "k")
+
+    plt.gcf().set_size_inches(10.5, 18.5)
+    ax = plt.gcf().gca()
+    ax.set_aspect("equal", "box")
+    ax.set_axis_off()
+    plt.show()
 
 
-def build_embedding_graph(gcode):
-    n = len(gcode) // 2
+def nelson_gc_to_sage_gc(gc):
+    """
+    Convert the gauss code format given in `gauss_codes.py` (Prof. Nelson's
+    gauss codes) to the format used internally by `sage`.
 
-    G = nx.Graph()
+    Prof. Nelson's gauss codes use `sign` to indicate under/over, and a trailing
+    `.5` to indicate negative crossings.
+
+    Sage's internal Gauss codes separate the crossing sign into a second list.
+    """
+    new_gc = [int(x) for x in gc]  # Remove all trailing .5's
+    assert len(new_gc) % 2 == 0
+    n = len(new_gc) // 2  # Number of crossings
+    new_orient = [1 if i in gc else -1 for i in range(1, n + 1)]
+    return [[new_gc], new_orient]
+
+
+def knot_to_layout(K):
+    """
+    Fix the gauss code ordering if needed, and call to `linear_layout()` to get
+    the connection information for the crossings, and the list of semiarcs.
+    """
+    [gc], orient = K.oriented_gauss_code()
+    gc, orient = fix_gc_order(gc, orient)
+    crossings, semiarcs = linear_layout(gc, orient)
+    return crossings, semiarcs
+
+
+def plain_semiarcs(semiarcs):
+    return [(a, b.value, c, d.value) for a, b, c, d in semiarcs]
+
+
+def route(semiarcs):
+    """
+    Perform the actual algorithm itself.
+    """
+
+    # Initialize the stacks representing the upper / lower half-planes. We'll be
+    # pushing / popping semiarcs IDs (see: semiarc_map) to these stacks as we
+    # perform the algorithm.
+    upper, lower = [], []
+    assert len(semiarcs) % 2 == 0
+
+    # Create a dictionary for associating (crossing, dir) pairs with
+    # an abstract ID representing the semiarc
+    semiarc_map = {}
+
+    # `a` = crossing a, `da` = exit  direction for `a`
+    # `b` = crossing b, `db` = enter direction for `b`
+    for i, (a, da, b, db) in enumerate(semiarcs):
+        semiarc_map[a, da] = semiarc_map[b, db] = i
+
+    # Check if the upper element is v
+    def peek(l, v):
+        return len(l) >= 1 and l[-1] == v
+
+    # Initialize the dictionaries giving our semicircle positioning information.
+    #
+    # Keys: semiarc id's
+    #
+    # Values: a list of numbers. A protypical element x in this list encodes
+    #         information as follows:
+    #         - abs(x) gives the x coordinate of one of the endpoints of a
+    #           semicircle that's part of our arc of interest
+    #         - sign(x) describes whether we have an arc that's going out from
+    #           the horizontal line or returning to it. x < 0 --> returning,
+    #           x > 0 --> leaving.
+    upper_cs = {}
+    lower_cs = {}
+
+    x = 1
+
+    # In the below, in general, pushing a semiarc to stack corresponds to
+    # recording an x coordinate where it leaves the spine. Popping corresponds
+    # to recording an x coordinate where it returns to the spine. Note, x will
+    # be a variable in the outer scope when these functions are called.
+    def push_upper(s):
+        """
+        Pushes s (a semiarc ID, as obtained through semiarc_map) to the stack
+        representing the upper half-plane, and adds the current x value to the
+        list of associated x values for the semiarc. See the initialization
+        comment for `upper_cs` for more.
+        """
+        upper_cs.setdefault(s, []).append(x)
+        upper.append(s)
+
+    def push_lower(s):
+        lower_cs.setdefault(s, []).append(x)
+        lower.append(s)
+
+    def pop_upper(expect=None):
+        s = upper.pop()
+        if expect is not None:
+            assert expect == s
+        upper_cs.setdefault(s, []).append(-x)
+        return s
+
+    def pop_lower(expect=None):
+        s = lower.pop()
+        if expect is not None:
+            assert expect == s
+        lower_cs.setdefault(s, []).append(-x)
+        return s
+
+    def push_or_pop_upper(s):
+        """
+        If s is the top element of upper, pop it off.
+
+        Else, push it on.
+        """
+        if peek(upper, s):
+            pop_upper(s)
+        else:
+            push_upper(s)
+
+    def push_or_pop_lower(s):
+        if peek(lower, s):
+            pop_lower(s)
+        else:
+            push_lower(s)
 
     crossings = []
-    knot_order = []
-    # First, build crossing gadgets
-    for i in range(n):
-        nodes = range(5 * i, 5 * i + 5)
-        G.add_nodes_from(nodes)
 
-        t, l, c, r, b = nodes
-        G.add_edge(l, t)
-        G.add_edge(r, t)
-        G.add_edge(b, l)
-        G.add_edge(b, r)
-
-        crossings.append(nodes)
-
-    for i in range(len(gcode)):
-        # Get information from the gauss code
-        cross1, o1, p1 = decompose_c(gcode[i])
-        cross2, o2, p2 = decompose_c(gcode[(i + 1) % len(gcode)])
-        print(cross1, cross2, o1, o2, p1, p2)
-
-        t1, l1, c1, r1, b1 = crossings[cross1 - 1]
-        t2, l2, c2, r2, b2 = crossings[cross2 - 1]
-
-        if o1 == 1:
-            src = t1
-        elif p1 == 1:
-            src = l1
-        else:
-            src = r1
-
-        if o2 == 1:
-            dst = b2
-        elif p2 == 1:
-            dst = r2
-        else:
-            dst = l2
-
-        G.add_edge(c1, src)
-        G.add_edge(src, dst)
-        G.add_edge(dst, c2)
-        knot_order.append([c1, src, dst])
-
-    assert nx.check_planarity(G)[0]
-
-    print(crossings)
-
-    return G, knot_order
-
-
-def walk_face(embed, src, dst):
-    face = [src, dst]
-
-    while True:
-        last, new = embed.next_face_half_edge(*face[-2:])
-        if [last, new] == face[:2]:
-            break
-        face.append(new)
-
-    return face[:-1]
-
-
-def get_all_faces(G, embed):
-    faces = []
-    half_edges = set(it.chain(G.edges, map(lambda e: e[::-1], G.edges)))
-    while half_edges:
-        e = next(iter(half_edges))
-        face = walk_face(embed, *e)
-        faces.append(face)
-        for fe in zip(face, irotate_right(face, -1)):
-            half_edges.remove(fe)
-
-    return faces
-
-
-def add_c_shape(path, x1, x2, y_sign):
-    y = y_sign * abs(x2 - x1)
-    path.append((x1, y))
-    path.append((x2, y))
-    path.append((x2, 0))
-
-
-def get_c_shapes(path):
-    intervals = []
-    for p1, p2 in zip(path, path[1:]):
-        (p1x, p1y), (p2x, p2y) = p1, p2
-        if p1y == p2y:
-            intervals.append((min(p1x, p2x), max(p1x, p2x), sign(p1y)))
-
-    return intervals
-
-
-def get_envelope(c_shapes, x, y):
-    y = sign(y)
-    assert y != 0
-    min_size, min_c = float("inf"), None
-    for (cx1, cx2, cy) in c_shapes:
-        if cy == y and cx1 < x and x < cx2:
-            size = cx2 - cx1
-            assert size != min_size
-            if size < min_size:
-                min_size = size
-                min_c = (cx1, cx2)
-
-    return min_c
-
-
-def find_gap(cross_x, path, envelope):
-    print("finding gap for", envelope)
-    assert envelope != None
-    _, ex2 = envelope
-    c_shapes = get_c_shapes(path)
-
-    # For sanity checking, we ensure that the crossing is valid by
-    # checking for horizontal lines between the two nearest crossings.
-
-    # TODO: This is sketch, we are advancing past the last crossing
-    # and back from the first by cross_x[1], which is supposed to be
-    # the delta.
-    next_x = min((x for x in cross_x if x > ex2), default=cross_x[-1] + cross_x[1])
-    prev_x = max((x for x in cross_x if x < ex2), default=-cross_x[1])
-
-    # Check for the connecting line segment on the main line
-    for (cx1, cx2, cy) in c_shapes:
-        if cy == 0 and prev_x + 1 <= cx1 <= cx2 <= next_x - 1:
-            print(f"blocking segment {cx1}, {cx2} found inside {prev_x}, {next_x}")
-            return [False, -1, -1, -1]
-
-    # Ok the gap exists, so where is it? ex2 is the right side of the
-    # envelope, so it's the right bound. We need to search for the
-    # left bound.
-    right_bound = ex2
-    left_bound = max((x for (x, y) in path if x < right_bound), default=-cross_x[1])
-    midpoint = (right_bound + left_bound) / 2
-
-    print(f"gap from {left_bound} to {right_bound}, midpoint {midpoint}")
-    return True, left_bound, midpoint, right_bound
-
-
-def escape(cross_x, path, x, y):
-    print(f"Escaping from {x} at y = {y}")
-    c_shapes = get_c_shapes(path)
-    e = get_envelope(c_shapes, x, y)
-    if e is None:
-        return [None]
-
-    gap_found, _, midpoint, _ = find_gap(cross_x, path, e)
-
-    if gap_found:
-        return [(*e, midpoint)] + escape(cross_x, path, midpoint, -y)
-
-    return [e]
-
-
-def normalize_gauss_order(gcode):
-    crossings_map = {}
-    top_cross = 0
-    new_gcode = []
-    for c in gcode:
-        cnum, over_under, pos_neg = decompose_c(c)
-        if cnum not in crossings_map:
-            top_cross += 1
-            crossings_map[cnum] = top_cross
-
-        new_gcode.append(recompose_c(crossings_map[cnum], over_under, pos_neg))
-
-    return new_gcode
-
-def check_path(path):
-    segs1, segs2 = it.tee(zip(path, path[1:]))
-
-    # every path is either vertical or horizontal, with nonzero length
-    for (x1, y1), (x2, y2) in segs1:
-        assert (x1 == x2) or (y1 == y2)
-
-    for ((x1, y1), (x2, y2)), ((x3, y3), (x4, y4)) in it.combinations(segs2, 2):
-        if x1 == x2 and x3 == x4:
-            if x2 == x3:
-                assert max(y1, y2) <= min(y3, y4) or min(y1, y2) >= max(y3, y4)
-        elif y1 == y2 and y3 == y4:
-            if y2 == y3:
-                assert max(x1, x2) <= min(x3, x4) or min(x1, x2) >= max(x3, x4)
-        else:
-            if y1 == y2:
-                x1, x3 = x3, x1
-                y1, y3 = y3, y1
-                x2, x4 = x4, x2
-                y2, y4 = y4, y2
-
-            # seg 1 is vertical now, seg 2 is horizontal
-            assert x1 == x2
-            assert y3 == y4
-
-            if not (x1 in (x3, x4) and y3 in (y1, y2)):
-                assert not (min(x3, x4) <= x1 <= max(x3, x4) and min(y1, y2) <= y3 <= max(y1, y2))
-
-def get_path(path, cross_x, x1, x2, y1, y2):
-    print(f"Getting path from {x1} to {x2}")
-    n = len(cross_x)
-    c_shapes = get_c_shapes(path)
-    if y1 == y2:
-        if y1 == 0:
-            # CASE 0
-            # easy
-            path.append((x2, y2))
-            # TODO: This case may not be as easy as we though
-            assert get_envelope(c_shapes, x1 + 1, 1) == None
-            assert get_envelope(c_shapes, x2 - 1, 1) == None
-            assert get_envelope(c_shapes, x1 + 1, -1) == None
-            assert get_envelope(c_shapes, x2 - 1, -1) == None
-
-        else:
-            # CASE 1
-            e1 = get_envelope(c_shapes, x1, y1)
-            e2 = get_envelope(c_shapes, x2, y2)
-            if e1 == e2:
-                # base case, they share the same envelope and are on
-                # the same side, so we know that we can just connect
-                # them directly.
-                add_c_shape(path, x1, x2, y1)
-
-            else:
-                # The exit and approach are on opposite sides and at least one has an containing envelope.
-
-                esc1 = escape(cross_x, path, x1, y1)
-                esc2 = escape(cross_x, path, x2, y2)
-
-                print(esc1, esc2)
-                # We already know that we aren't in a matching
-                # envelope, so we have two cases to consider.
-                # TODO: Validate that this is correct
-                # TODO: This is the same as case 4
-                if len(esc1) >= len(esc2):
-                    # we break symmetry arbitrarily
-                    x_psuedo = esc1[0][2]
-                    print("recurse! 1.1")
-                    add_c_shape(path, x1, x_psuedo, y1)
-                    get_path(path, cross_x, x_psuedo, x2, -y1, y2)
-
-                else:
-                    x_psuedo = esc2[0][2]
-                    # Ok, so this time we go in reverse
-                    print("recurse! 1.2")
-                    get_path(path, cross_x, x1, x_psuedo, y1, -y2)
-                    add_c_shape(path, x_psuedo, x2, y2)
-
-                print("oh no1")
-
-    else:
-        if y1 == 0:
-            # CASE 2
-            # We are coming out of the first crossing horizontally,
-            # but into the second vertically, so we must be
-            # backtracking.
-
-            # The question is, which way do we go, up or down?
-
-            # First, we need to compute the orientation of the gadgets
-            # edge_order = [0, 3, 4, 1]
-            # src_rotation_map = {(+1, +1): 1, (+1, -1): 1, (-1, +1): 2, (-1, -1): 0}
-            # src_edge_order = rotate_right(edge_order, src_rotation_map[decompose_c(c)])
-
-            ## Old implementation here
-            path.append((x1 + 1, 0))
-            e1 = get_envelope(c_shapes, x1, y2)
-            e2 = get_envelope(c_shapes, x2, y2)
-            if e1 == e2:
-                # base case
-                add_c_shape(path, x1 + 1, x2, y2)
-
-            else:
-                # We're backtracking, so the source must be "open to
-                # the air". In fact, it must be open on both sides of
-                # the main line.
-                assert escape(cross_x, path, x1 + 1, -1) == [None]
-                assert escape(cross_x, path, x1 + 1, +1) == [None]
-
-                esc2 = escape(cross_x, path, x2, y2)
-                print(esc2)
-
-                x_psuedo = esc2[0][2]
-                print(f"recurse! 2 {x_psuedo}")
-                get_path(path, cross_x, x1, x_psuedo, y1, -y2)
-                add_c_shape(path, x_psuedo, x2, y2)
-                print("oh no2")
-
-        elif y2 == 0:
-            # CASE 3
-            # We want to go into the second crossing horizontally
-
-            # We go just short of the path, then we go in.
-            # Importantly, there is no restriction on which direction
-            # we can approach the main line from.
-            e1 = get_envelope(c_shapes, x1, y1)
-            e2 = get_envelope(c_shapes, x2 - 1, y1)
-            if e1 == e2:
-                # base case
-                add_c_shape(path, x1, x2 - 1, y1)
-
-            else:
-                # Two cases to consider here. Either the destination
-                # is a new vertex, or it's 1, but in either case the
-                # destination is "open to the air", although we don't
-                # know which direction is open. Therefore, all of the
-                # escaping is done on the source end.
-                esc2u = escape(cross_x, path, x2 - 1, +1)
-                esc2d = escape(cross_x, path, x2 - 1, -1)
-                assert esc2u == [None] or esc2d == [None]
-
-                esc1 = escape(cross_x, path, x1, y1)
-
-                # Thus, we escape from the source
-                x_psuedo = esc1[0][2]
-                add_c_shape(path, x1, x_psuedo, y1)
-                print("recurse! 3")
-                get_path(path, cross_x, x_psuedo, x2 - 1, -y1, y2)
-
-                print("oh no3")
-
-            path.append((x2, y2))
-
-        else:
-            # CASE 4
-            # We must exit and approach from different sides, so we
-            # must cross the main line at some point. The envelopes
-            # cannot be equal unless they are both the None (aka.
-            # largest) envelope.
-
-            e1 = get_envelope(c_shapes, x1, y1)
-            e2 = get_envelope(c_shapes, x2, y2)
-
-            if e1 == e2 == None:
-                # If both are "open to the air", we can go to the
-                # right or left, we choose to go to the right for
-                # aesthetic reasons. There can be no more than min(n -
-                # c1i, n - c2i) other paths that must go around the
-                # right, and we add 1 to make room for the horizontal
-                # exit from the last crossing.
-
-                # x_psuedo = cross_x[-1] + 1 + min(n - c1i, n - c2i)
-
-                x_max = cross_x[-1] + cross_x[1]
-                x_min = max(x for (x, y) in path)
-                x_psuedo = (x_max + x_min) / 2
-
-                add_c_shape(path, x1, x_psuedo, y1)
-                add_c_shape(path, x_psuedo, x2, y2)
-            else:
-                # The exit and approach are on opposite sides and at least one has an containing envelope.
-
-                esc1 = escape(cross_x, path, x1, y1)
-                esc2 = escape(cross_x, path, x2, y2)
-
-                print(esc1, esc2)
-                # We already know that we aren't in a matching
-                # envelope, so we have two cases to consider.
-                # TODO: Validate that this is correct
-                if len(esc1) >= len(esc2):
-                    # we break symmetry arbitrarily
-                    x_psuedo = esc1[0][2]
-                    print("recurse! 4.1")
-                    add_c_shape(path, x1, x_psuedo, y1)
-                    get_path(path, cross_x, x_psuedo, x2, -y1, y2)
-
-                else:
-                    x_psuedo = esc2[0][2]
-                    # Ok, so this time we go in reverse
-                    print("recurse! 4.2")
-                    get_path(path, cross_x, x1, x_psuedo, y1, -y2)
-                    add_c_shape(path, x_psuedo, x2, y2)
-
-
-def build_stupid_graph(gcode):
-    norm_gcode = normalize_gauss_order(gcode)
-    if gcode != norm_gcode:
-        print(f"Reordered\n{gcode} to\n{norm_gcode}.")
-        gcode = norm_gcode
-
-    # The total number of crossings (n) is going to be 1/2 the total length of
-    # the gauss code. We use integer divide to implicitly cast to an int so that
-    # we can put it into `range(n)` later.
-    n = len(gcode) // 2
-
-    # Initialize the drawing path, which is currently a list of tuples
-    # representing coordinates along the path that we are going to draw.
+    # Each crossing appears in 4 semiarcs: in 2 as the start point, and in 2 as
+    # the endpoint. Hence, len(semiarcs) // 2 + 1 gives `max_crossing_number` +
+    # 1. So range(1, len(semiarcs) // 2 + 1) gives us an iterator for all the
+    # crossings.
     #
-    # The current form for these coordinates is (<x>, <y>)
-    path = [(0, 0)]
+    # i = crossing number
+    for i in range(1, len(semiarcs) // 2 + 1):
+        # l is the ID of the semiarc entering crossing i from the left.
+        l = semiarc_map[i, Dir.LEFT]
 
-    # A list giving us the x coordinates at which each crossing will be drawn.
-    # Initially, we will make the drawing grid _way_ larger than it needs to be,
-    # to account for some edge cases where we need a lot of horizontal spacing.
-    #
-    # This occurs when we have performed some "backtracking" in the knot, i.e.
-    # when we encounter a crossing we've seen already before we've encountered
-    # all crossings in the diagram. E.g., in the knot (6,4).
-    cross_x = [i * 3 for i in range(n)]
+        print(x, 1, lower, upper[::-1], l)
 
-    # Keep track of crossings we've seen already.
-    cross_seen = [False for i in range(n)]
+        # If this assertion fails, we would need to push the semiarc.
+        # (like for the first arc special case), but how do we know
+        # which side to generate it on?
+        assert l in upper or l in lower or not (upper or lower)
 
-    G, _ = build_embedding_graph(gcode)
-    embed = nx.check_planarity(G)[1]
-    faces = get_all_faces(G, embed)
+        # If this assertion fails, how do we determine which direction
+        # to shift in and how much to shift?
+        assert (upper + lower).count(l) <= 1
 
-    for i in range(len(gcode) - 1):
-        # Get information from the gauss code
-        c1, c2 = gcode[i], gcode[i + 1]
-        c1i = get_cnum(c1) - 1
-        c2i = get_cnum(c2) - 1
-        x1, x2 = cross_x[c1i], cross_x[c2i]
+        # If `l` has already been pushed to `upper` in the past, pop elements
+        # from `upper` and push them to `lower` until we reach `l`, and then pop
+        # `l`.
+        if l in upper:
+            while not peek(upper, l):
+                push_or_pop_lower(pop_upper())
+                x += 1
 
-        # y_out is -1 * y_in
-        y1 = -1 * get_y_in(cross_seen[c1i], c1)
-        y2 = get_y_in(cross_seen[c2i], c2)
-        cross_seen[c1i] = True
+            pop_upper(l)
 
-        print(f"c: {c1} → {c2}, x: {x1} → {x2}, y: {y1} → {y2}")
-        try:
-            get_path(geometry, path, x1, x2, y1, y2)
-            check_path(path)
-        except:
-            traceback.print_exc()
-            break
-    else:
-        # fix the termination FIXME!
-        x1, _ = path[-1]
-        y1 = -1 * get_y_in(True, gcode[-1])
-        print(f"c: {gcode[-1]} → {gcode[0]}, x: {x1} → {0}, y: {y1} → {0}")
-        try:
-            get_path(geometry, path, x1, 0, y1, 0)
-            check_path(path)
-        except:
-            traceback.print_exc()
+        # The same for lower
+        elif l in lower:
+            while not peek(lower, l):
+                push_or_pop_upper(pop_lower())
+                x += 1
 
-    # Store the under/overcrossing and handedness information of the crossings
-    c_info = []
-    for cnum in range(1, n + 1):
-        # Yeah jon this is gross what the heck
-        # This is gross
-        for c in gcode:
-            stop = False
-            if get_cnum(c) == cnum:
-                c_info.append(((c / abs(c)), c % 1))
-                stop = True
-            if stop:
-                break
+            pop_lower(l)
 
-    return path, cross_x, c_info
+        # In the event that we're treating the first crossing, both stacks are
+        # empty. In this case we push to _both_, and clean up the issue at the
+        # end.
+        elif i == 1:
+            push_lower(l)
+            push_upper(l)
 
+        # We're now done processing the left strand for crossing i, so move to
+        # addressing the up/down strands. These are located one x value to the
+        # right of the left strand's endpoint.
+        x += 1
 
-# OK this is the worst thing ever but just ignore it for now
-def to_list(mylist):
-    return [list(mytuple) for mytuple in mylist]
+        # Get the semiarc IDs for the UP / DOWN strands
+        u = semiarc_map[i, Dir.UP]
+        d = semiarc_map[i, Dir.DOWN]
+        print(x, 2, lower, upper[::-1], d, u)
 
-def to_tuple(mylist):
-    return [tuple(mylist) for sublist in mylist]
+        push_or_pop_upper(u)
+        push_or_pop_lower(d)
+        crossings.append(x)  # up / down share same x as the crossing
 
-def space_xy(draw_path, cross_x):
-    """
-    gets it good enough to fix by hand
-    """
+        x += 1
 
-    x_vals = set()
-    y_vals = set()
-    for x, y in draw_path:
-        x_vals.add((x))
-        y_vals.add((y))
+        # Process the rightward (exiting) strand for the crossing.
+        r = semiarc_map[i, Dir.RIGHT]
+        print(x, 3, lower, upper[::-1], r)
 
-    x_vals = sorted(x_vals)
-    y_vals = sorted(y_vals)
+        # If this assertion fails, how will we know which side to pop
+        # from? If we just choose an arbitrary side we won't fail to
+        # be planar due to shifting, but we cannot guarantee
+        # optimality.
+        assert not (peek(upper, r) and peek(lower, r))
 
-    # print(y_vals)
-
-    # print(x_vals)
-
-    x0 = x_vals.index(0)
-    y0 = y_vals.index(0)
-
-    x_map = {x: x_vals.index(x) - x0 for x in x_vals}
-    y_map = {y: y_vals.index(y) - y0 for y in y_vals}
-
-    new_path = []
-    for (x, y) in draw_path:
-        new_path += [[x_map[x], y_map[y]]]
-
-    new_cross_x = [x_map[x] for x in cross_x]
-
-    for i, ((x1, y1), (x2, y2)) in enumerate(zip(new_path[:-1], new_path[1:])):
-        dist = (abs(x1 - x2)+1)//2
-        # print(f"i={i}, dist={dist}, dist//2={dist//2}")
-        if y1 == y2:
-            sgn = sign(y1)
-            # Adjust the y values
-            # print((x1, y1), (x2,y2), sgn*dist)
-            if abs(sgn*dist) < abs(y1):
-                new_path[i][1] = sgn*dist
-                new_path[i+1][1] = sgn*dist
-
-    for i in range(len(new_path)):
-        new_path[i] = tuple(new_path[i])
-
-    return new_path, new_cross_x
-
-
-def draw_presentation(draw_paths, x_vals, c_info, fname="test_gauss", display=True):
-    """
-    draw
-
-    draw_paths a list of lists where each sublist is a list of tuples specifying
-    a path to draw in TikZ
-
-    x_vals is
-    """
-    n = len(x_vals)
-    break_width = 0.2
-
-    # Get the LaTeX preamble
-    preamble = "\\documentclass[border=10pt]{standalone}\n"
-    preamble += "\\usepackage{tikz}\n"
-    preamble += "\\begin{document}\n"
-    preamble += "\\begin{tikzpicture}\n"
-
-    drawing = ""
-
-    # broken_paths = []
-    # this_path = []
-    # for (xi, yi), (xj, yj) in zip(draw_paths[:-1], draw_paths[1:]):
-    #     if yi == 0 and yj == 0:
-
-    for path in draw_paths:
-        drawing += "\\draw[-latex]"
-        for vert in path:
-            drawing += str(vert) + " -- "
-        # Remove the ` -- ` from the last coordinate, terminate the path, and
-        # break the line
-        drawing = drawing[:-4] + ";\n"
-
-    # Draw all the breaks in the dumb way
-    for x in x_vals:
-        drawing += f"\\fill[white] ({x-break_width}, -{break_width}) rectangle ({x + break_width}, {break_width});\n"
-
-    for cnum, x in enumerate(x_vals):
-        u_or_o, handedness = c_info[cnum]
-        # print(u_or_o, handedness)
-
-        # Draw the horizontal strand, going a bit further than the break because
-        # otherwise the arrowtip gets too thin to cover the line at the end
-        drawing += (
-            f"\\draw[-latex] ({x-1+break_width}, 0) -- ({x-.75*break_width}, 0);\n"
-        )
-
-        if u_or_o < 0:
-            # Only need to reinsert vertical strands
-            drawing += f"\\draw ({x}, {break_width}) -- ({x}, {-1*break_width});\n"
-            if handedness != 0:
-                drawing += f"\\draw[-latex] ({x}, -1) -- ({x}, {-.75*break_width});\n"
-            else:
-                # drawing += f"\\draw[-latex] ({x}, {-1.75*break_width}) -- ({x}, -1);\n"
-                drawing += f"\\draw[-latex] ({x}, 1) -- ({x}, {.75*break_width});\n"
-
+        if peek(upper, r):
+            pop_upper(r)
+        elif peek(lower, r):
+            pop_lower(r)
         else:
-            drawing += f"\\draw ({x-break_width}, 0) -- ({x+break_width}, 0);\n"
+            # If this assertion fails, then it is because we are on
+            # the last crossing, but we failed to find the final
+            # semiarc.
+            assert (i + 1, Dir.LEFT) in semiarc_map
+            l2 = semiarc_map[i + 1, Dir.LEFT]
 
-            if handedness != 0:
-                drawing += f"\\draw[-latex] ({x}, 1) -- ({x}, {.75*break_width});\n"
+            # If this assertion fails, how do we know which side to
+            # push the semiarc on? If we just choose an arbitrary side
+            # we won't fail to be planar due to shifting, but we
+            # cannot guarantee optimality.
+            assert l2 in upper + lower + [r]
+
+            if l2 == r:
+                # Arbitrary decision, either choice is optimal.
+                push_upper(r)
+            elif l2 in upper:
+                push_lower(r)
+            elif l2 in lower:
+                push_upper(r)
+
+        x += 1
+
+    # The only things remaining in the stacks at this point should be
+    #   (a) the copy of the first crossing's left strand (recall we pushed it
+    #       once to each stack), and
+    #   (b) strands that go around the right endpoint of the spine.
+    # Hence, abs(len(upper) - len(lower)) <= 1.
+    assert abs(len(upper) - len(lower)) <= 1
+    while upper and lower:
+        print(lower, upper[::-1])
+        assert pop_upper() == pop_lower()
+        x += 1
+
+    print(lower, upper[::-1])
+
+    # Cleanup the "leftover" return c
+    if peek(upper, semiarc_map[1, Dir.LEFT]):
+        upper.pop()
+    elif peek(lower, semiarc_map[1, Dir.LEFT]):
+        lower.pop()
+
+    print(lower, upper[::-1])
+
+    # Ensure that there's nothing else remaining to pop.
+    assert upper == lower == []
+
+    # Honestly this probably shouldn't be an inner function
+    def deparenthesize(seq):
+        """
+        Pair up endpoints for departing / returning to the spine
+        """
+        result = []
+        stack = []
+        for x in seq:
+            if x > 0:
+                stack.append(x)
             else:
-                drawing += (
-                    f"\\draw[-latex] ({x}, -1) -- ({x}, {-.75*break_width});\n"
-                )
+                y = stack.pop()
+                result.append((y, abs(x)))
+        return result
 
-        # Annotate with sign, and fill depending on sign
-        if handedness != 0:
-            drawing += (
-                f"\\node[circle, fill=black, draw=black, inner sep=1pt] () at ({x}, 0) "
-                + "{};\n"
-            )
-            handedness = "-"
-        else:
-            drawing += (
-                f"\\node[circle, fill=white, draw=black, inner sep=1pt] () at ({x}, 0) "
-                + "{};\n"
-            )
-            handedness = "+"
+    upper_cs = {k: deparenthesize(v) for k, v in upper_cs.items()}
+    lower_cs = {k: deparenthesize(v) for k, v in lower_cs.items()}
 
-        # Add the label
-        drawing += (
-            f"\\node[above left] () at ({x}, 0) "
-            + "{\small $"
-            + str(int(cnum + 1))
-            + "^"
-            + handedness
-            + "$};\n"
-        )
-        drawing += "\n\n"
-
-    out_str = preamble + drawing + "\\end{tikzpicture}\n\\end{document}"
-
-    # Need to chdir else pdflatex will pollute the parent directory with aux
-    # files and stuff
-    os.chdir("tests")
-    with open(f"{fname}.tex", "w") as f:
-        f.write(out_str)
-    os.system(f"pdflatex -halt-on-error {fname}.tex | grep '^!.*' -A200 --color=always")
-    print(fname)
-    if display:
-        os.system(f"zathura {fname}.pdf")
-    os.chdir("..")
-    return out_str
-
-
-def aggressive_tightener(path, cross_x):
-
-    return
-
-
-def get_shift_dict(gcode):
-    """
-    Create a dict where <val> indicates how many unique crossings we'll
-    encounter before backtracking if we perform <key> cyclic permutations of the
-    input Gauss code
-    """
-    n = len(gcode) // 2
-    len_dict = {i: 0 for i in range(n)}
-
-    for i in len_dict:
-        i_gcode = gcode[i:] + gcode[:i]
-        i_seen_cs = set()
-        for c in i_gcode:
-            cnum = get_cnum(c)
-            if cnum in i_seen_cs:
-                break
-            else:
-                len_dict[i] += 1
-                i_seen_cs.add(cnum)
-
-    sorted_dict = sorted(len_dict.items(), key=lambda kv: kv[1])
-    print("sorted_dict is", sorted_dict)
-    return sorted_dict
-
-
-def construct_all():
-    for gc in gknot.keys():
-        knot = gknot[gc]
-        sorted_dict = get_shift_dict(knot)
-
-        try:
-            c, i = gc
-        except TypeError:
-            c, i = 0, 0
-
-        # We want to get all cyclic shift permutations as well
-        for shift_num in range(len(knot) // 2):
-            print(knot)
-            try:
-                path, cross_x, c_info = build_stupid_graph(knot)
-                path, cross_x = space_xy(path, cross_x)
-                draw_presentation([path], cross_x, c_info, fname=f"{c}_{i}_{shift_num}", display=False)
-            except RecursionError:
-                print(f"RecursionError on {knot}")
-                pass
-            except TypeError:
-                print(f"TypeError on {knot}")
-                pass
-            except IndexError:
-                print(f"IndexError on {knot}")
-                pass
-
-            knot = knot[1:] + [knot[0]]
+    return upper_cs, lower_cs, crossings
 
 
 if __name__ == "__main__":
-    construct_all()
+    B = BraidGroup(4)
+    K = Knot(B([1, 1, 1]))
+    # K = Knot(B([1,1,1,2,-1,2,-3,2,-3]))
 
-    # Bad apples currently:
-    # knot = gknot[(6,2)]
-    # knot = gknot[(7,2)]
-    # knot = gknot[(6,6)]
-    # knot = gknot[(7,3)]
-    # knot = gknot[(8,10)]
+    # K = Knot([[3,1,2,4], [8,9,1,7], [5,6,7,3], [4,18,6,5],
+    #           [17,19,8,18], [9,10,11,14], [10,12,13,11],
+    #           [12,19,15,13], [20,16,14,15], [16,20,17,2]])
 
-    knot_inds_to_sum = [(8, 10), (8, 10), (8, 10), (8, 10)]
-    inds = [4, 1, 2, 7]
-    knot = gknot[knot_inds_to_sum.pop()]
-    for i, ind in zip(inds, knot_inds_to_sum):
-        knot = conn_sum(knot, gknot[ind], ind=i)
+    K = Link(
+        [
+            [
+                [
+                    1,
+                    -2,
+                    -3,
+                    -8,
+                    -12,
+                    13,
+                    -14,
+                    15,
+                    -7,
+                    -1,
+                    2,
+                    -4,
+                    10,
+                    11,
+                    -13,
+                    12,
+                    -11,
+                    -16,
+                    4,
+                    3,
+                    -5,
+                    6,
+                    -9,
+                    7,
+                    -15,
+                    14,
+                    16,
+                    -10,
+                    8,
+                    9,
+                    -6,
+                    5,
+                ]
+            ],
+            [-1, -1, 1, 1, 1, 1, -1, 1, 1, -1, 1, -1, -1, -1, -1, -1],
+        ]
+    )
 
-    path, cross_x, signs = build_stupid_graph(knot)
-    path, cross_x = space_xy(path, cross_x)
-    print(path)
-    draw_presentation([path], cross_x, signs, fname="test_gauss")
+    # K = Knot([[[-1,2,-3,4,-5,6,-7,1,-4,8,-6,5,-8,3,-2,7]], [-1,-1,-1,-1,1,1,-1,-1]])
+    # import gauss_codes
+    # K = Knot(nelson_gc_to_sage_gc(gauss_codes.gknot[11,2]))
+    # K = Knot(
+    #     [
+    #         [1, 5, 2, 4],
+    #         [3, 8, 4, 9],
+    #         [5, 11, 6, 10],
+    #         [14, 7, 15, 8],
+    #         [9, 2, 10, 3],
+    #         [18, 12, 19, 11],
+    #         [6, 13, 7, 14],
+    #         [22, 15, 23, 16],
+    #         [20, 18, 21, 17],
+    #         [12, 20, 13, 19],
+    #         [24, 21, 1, 22],
+    #         [16, 23, 17, 24],
+    #     ]
+    # )
+    # K = Knot(
+    #     [
+    #         [4, 2, 5, 1],
+    #         [8, 4, 9, 3],
+    #         [12, 9, 1, 10],
+    #         [10, 5, 11, 6],
+    #         [6, 11, 7, 12],
+    #         [2, 8, 3, 7],
+    #     ]
+    # )
 
-    # knot = gknot[(8, 10)]
-    # knot = gknot[(11, 42)]
-    # knot = gknot[(11,2)]
+    # crossings, semiarcs = knot_to_layout(K)
+    import gauss_codes
 
-    # path, cross_x, signs = build_stupid_graph(knot)
-    # path, cross_x = space_xy(path, cross_x)
-    # draw_presentation([path], cross_x, signs, fname="0")
-    # ...and probably more, but that's where we get wrecked rn.
+    # gc = gauss_codes.conn_sum(gauss_codes.gknot[10, 132], gauss_codes.gknot[8, 19])
+    # gc = gauss_codes.conn_sum(gc, gauss_codes.gknot[6, 2], ind=10)
+    # gc = gauss_codes.conn_sum(gc, gauss_codes.gknot[8, 13], ind=5)
+    # K = Knot(nelson_gc_to_sage_gc(gc))
+    K = Knot(nelson_gc_to_sage_gc(gauss_codes.gknot[10, 132]))
+    crossings, semiarcs = knot_to_layout(K)
 
-    # pathological_test = [
-    #     -1.5, 2, -3, 4.5, -5.5, 3, -6, 1.5, 7, 5.5, -4.5, 6, -2, -7
-    # ]
-    # path, cross_x, signs = build_stupid_graph(pathological_test)
-    # path, cross_x = space_xy(path, cross_x)
-    # draw_presentation([path], cross_x, signs, fname="0")
+    upper_cs, lower_cs, crossings = route(semiarcs)
+    plot(upper_cs, lower_cs, crossings, straight=0)
+
+    # for name, n_gc in gauss_codes.gknot.items():
+    #     print("="*10 + " " + str(name))
+    #     K = Knot(nelson_gc_to_sage_gc(n_gc))
+    #     crossings, semiarcs = knot_to_layout(K)
+    #     plot(*route(semiarcs), straight=0)
