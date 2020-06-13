@@ -58,6 +58,51 @@ def dt2gauss(dt):
 
     return gauss
 
+def gauss2signed_gauss(gcode):
+    import networkx as nx
+    n = len(gcode) // 2
+
+    G = nx.Graph()
+    crossings = []
+    for i in range(n):
+        nodes = range(5*i, 5*i+5)
+        G.add_nodes_from(nodes)
+
+        t, l, c, r, b = nodes
+        G.add_edge(l, t)
+        G.add_edge(r, t)
+        G.add_edge(b, l)
+        G.add_edge(b, r)
+
+        crossings.append(nodes)
+
+    for i in range(len(gcode)):
+        j = (i + 1) % len(gcode)
+        cross1, o1 = abs(gcode[i]), gcode[i] > 0
+        cross2, o2 = abs(gcode[j]), gcode[j] > 0
+
+        t1, l1, c1, r1, b1 = crossings[cross1-1]
+        t2, l2, c2, r2, b2 = crossings[cross2-1]
+
+        src = b1 if o1 else r1
+        dst = t2 if o2 else l2
+
+        G.add_edge(c1, src)
+        G.add_edge(src, dst)
+        G.add_edge(dst, c2)
+
+    embed = nx.check_planarity(G)[1]
+    orient = []
+
+    for t, l, c, r, b in crossings:
+        o = list(embed.neighbors_cw_order(c))
+        if o[(o.index(t) + 1) % 4] == r:
+            orient.append(+1)
+        else:
+            orient.append(-1)
+
+    return [gcode], orient
+
 gknot = {
   (0):[-1,1],
 (3,1):[-1,2,-3,1,-2,3],
