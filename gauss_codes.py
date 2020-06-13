@@ -43,6 +43,21 @@ def multi_sum_from_gknot(idxs, inds=None):
         knot = conn_sum(knot, gknot[idx], ind=i)
     return knot
 
+def dt2gauss(dt):
+    x, y = [], []
+    for i, dti in enumerate(dt):
+        x.extend((2*i + 1, dti))
+
+    for i in range(len(dt)):
+        y.extend('ou' if x[2*i+1] > 0 else 'uo')
+
+    gauss = []
+    for i in range(1, len(x)+1):
+        j = x.index(i)
+        gauss.append((j//2 + 1) * (-1 if y[j] == 'u' else 1))
+
+    return gauss
+
 gknot = {
   (0):[-1,1],
 (3,1):[-1,2,-3,1,-2,3],
