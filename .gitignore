@@ -133,6 +133,7 @@ dmypy.json
 
 # Test directory for step-by-step.py
 example-execution/**
+!example-execution/*.py
 
 # Emacs auto-generated files
 **/auto/*

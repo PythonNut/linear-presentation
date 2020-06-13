@@ -731,7 +731,18 @@ def stacks_tex(upper, lower, nmax):
     return out_str
 
 
-def plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f, dirname):
+def plot_one_step(
+    gc,
+    orient,
+    state,
+    i,
+    upper_cs_f,
+    lower_cs_f,
+    crossings_f,
+    dirname,
+    draw_stacks=True,
+    draw_line=True,
+):
     """
     Plot a single step in the execution of the algorithm.
 
@@ -756,7 +767,8 @@ def plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f, dir
     """
     x, upper, lower, upper_cs, lower_cs, crossings = state
     print(state)
-    out_str += f"    \\draw[dotted] ({x}, -{2*nmax}) -- ({x}, {2*nmax});\n"
+    if draw_line:
+        out_str += f"    \\draw[dotted] ({x}, -{2*nmax}) -- ({x}, {2*nmax});\n"
 
     num_cs_so_far = len(crossings)
 
@@ -771,7 +783,8 @@ def plot_one_step(gc, orient, state, i, upper_cs_f, lower_cs_f, crossings_f, dir
         i += 1
 
     # Draw the stacks
-    out_str += stacks_tex(upper, lower, nmax)
+    if draw_stacks:
+        out_str += stacks_tex(upper, lower, nmax)
 
     # Ok now we draw the remaining crossings in gray
     out_str += "    \\begin{scope}[every path/.style={opacity=.2}, every node/.style={opacity=.2}]\n"
@@ -869,6 +882,40 @@ def build_frames(gkey):
         )
 
 
+def plot_final(gkey):
+    """
+    Plot *only* the resulting linear diagram
+    """
+    cn, ind = gkey
+    dirname = f"{cn}-{ind}"
+    if not isdir(dirname):
+        mkdir(dirname)
+
+    [gc], orient = nelson_gc_to_sage_gc(gauss_codes.gknot[gkey])
+
+    K = Knot([[gc], orient])
+    crossings, semiarcs = knot_to_layout(K)
+
+    # Awful. Keep a separate copy of the final state so that we can
+    # draw it all in gray.
+    upper_cs_f, lower_cs_f, crossings_f, states = route(semiarcs)
+    state = states[-1]
+    plot_one_step(
+        gc,
+        orient,
+        state,
+        999,
+        upper_cs_f,
+        lower_cs_f,
+        crossings_f,
+        dirname,
+        draw_stacks=False,
+        draw_line=False,
+    )
+
+    return
+
+
 def compile_single_file(fname):
 
     # run(["pdflatex", fname])
@@ -902,6 +949,10 @@ def compile_all():
     tex_files = [fname for fname in listdir() if ".tex" in fname]
     with Pool(5) as p:
         p.map(compile_single_file, tex_files)
+
+
+def compile_final():
+    compile_single_file("999.tex")
 
 
 def amalgamate(dirname, re_png=False, gif=False, mp4=True):
@@ -944,11 +995,13 @@ def amalgamate(dirname, re_png=False, gif=False, mp4=True):
 
 
 if __name__ == "__main__":
-    gkey = (8, 19)
-    cn, ind = gkey
-    dirname = f"{cn}-{ind}"
-    build_frames(gkey)
-    chdir(dirname)
-    compile_all()
-    amalgamate(dirname, re_png=True)
-    chdir("..")
+    for gkey in gauss_codes.gknot:
+        cn, ind = gkey
+        dirname = f"{cn}-{ind}"
+        plot_final(gkey)
+        chdir(dirname)
+        compile_final()
+        run(["mv", "999.tex", f"../finals/{dirname}.tex"])
+        run(["mv", "999.pdf", f"../finals/{dirname}.pdf"])
+        # amalgamate(dirname, re_png=True)
+        chdir("..")
