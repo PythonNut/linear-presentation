@@ -944,7 +944,7 @@ def amalgamate(dirname, re_png=False, gif=False, mp4=True):
 
 
 if __name__ == "__main__":
-    gkey = (7, 2)
+    gkey = (8, 19)
     cn, ind = gkey
     dirname = f"{cn}-{ind}"
     build_frames(gkey)
