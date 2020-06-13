@@ -44,6 +44,9 @@ def fix_gc_order(gc, orient):
 
     return new_gc, new_orient
 
+def sgn(x):
+    "Return the sign of x"
+    return 0 if x == 0 else -1 if x < 0 else 1
 
 def linear_layout(gc, orient):
     """
@@ -84,7 +87,7 @@ def linear_layout(gc, orient):
         #  - `b` is positive and we're entering on an overstrand, or
         #  - `b` is negative and we're entering on an understarnd.
         # In both these cases, the entering strand comes in from the top.
-        elif sign(b) == orient[abs(b) - 1]:
+        elif sgn(b) == orient[abs(b) - 1]:
             entry_dir = Dir.UP
 
         # Only remaining case is entering from the bottom
