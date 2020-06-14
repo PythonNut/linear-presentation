@@ -10,6 +10,7 @@ from os import mkdir, listdir, chdir
 from os.path import isdir
 
 import gauss_codes
+import gcodes_up_to_11 as gc11
 
 # For the parallel compilation
 from multiprocessing import Pool
@@ -397,7 +398,7 @@ def route(semiarcs):
         # l is the ID of the semiarc entering crossing i from the left.
         l = semiarc_map[i, Dir.LEFT]
 
-        print(x, 1, lower, upper[::-1], l)
+        # print(x, 1, lower, upper[::-1], l)
 
         # If this assertion fails, we would need to push the semiarc.
         # (like for the first arc special case), but how do we know
@@ -441,7 +442,7 @@ def route(semiarcs):
         # Get the semiarc IDs for the UP / DOWN strands
         u = semiarc_map[i, Dir.UP]
         d = semiarc_map[i, Dir.DOWN]
-        print(x, 2, lower, upper[::-1], d, u)
+        # print(x, 2, lower, upper[::-1], d, u)
 
         push_or_pop_upper(u)
         push_or_pop_lower(d)
@@ -451,7 +452,7 @@ def route(semiarcs):
 
         # Process the rightward (exiting) strand for the crossing.
         r = semiarc_map[i, Dir.RIGHT]
-        print(x, 3, lower, upper[::-1], r)
+        # print(x, 3, lower, upper[::-1], r)
 
         # If this assertion fails, how will we know which side to pop
         # from? If we just choose an arbitrary side we won't fail to
@@ -493,11 +494,11 @@ def route(semiarcs):
     # Hence, abs(len(upper) - len(lower)) <= 1.
     assert abs(len(upper) - len(lower)) <= 1
     while upper and lower:
-        print(lower, upper[::-1])
+        # print(lower, upper[::-1])
         assert pop_upper() == pop_lower()
         x += 1
 
-    print(lower, upper[::-1])
+    # print(lower, upper[::-1])
 
     # Cleanup the "leftover" return c
     if peek(upper, semiarc_map[1, Dir.LEFT]):
@@ -505,7 +506,7 @@ def route(semiarcs):
     elif peek(lower, semiarc_map[1, Dir.LEFT]):
         lower.pop()
 
-    print(lower, upper[::-1])
+    # print(lower, upper[::-1])
 
     # Ensure that there's nothing else remaining to pop.
     assert upper == lower == []
@@ -742,6 +743,7 @@ def plot_one_step(
     dirname,
     draw_stacks=True,
     draw_line=True,
+    use_fk_colors=True,
 ):
     """
     Plot a single step in the execution of the algorithm.
@@ -761,12 +763,20 @@ def plot_one_step(
     # print(gc, len(gc), nmax)
 
     out_str = r"""\documentclass[border=1pt]{standalone}
-\usepackage{tikz}
-\begin{document}
-  \begin{tikzpicture}
+\usepackage{tikz}"""
+
+    if use_fk_colors:
+        out_str += r"""\usepackage{xcolor} % For customizing page color and such
+\definecolor{bcol}{HTML}{1D252C}
+\definecolor{tcol}{HTML}{D6D7D9}
+\pagecolor{bcol}
+\color{tcol}"""
+
+    out_str += r"""\begin{document}
+  \begin{tikzpicture}[every draw/.style={line width=.8pt}]
     """
     x, upper, lower, upper_cs, lower_cs, crossings = state
-    print(state)
+    # print(state)
     if draw_line:
         out_str += f"    \\draw[dotted] ({x}, -{2*nmax}) -- ({x}, {2*nmax});\n"
 
@@ -882,7 +892,7 @@ def build_frames(gkey):
         )
 
 
-def plot_final(gkey):
+def plot_final(gkey, use_nelson_gcs=False):
     """
     Plot *only* the resulting linear diagram
     """
@@ -890,8 +900,10 @@ def plot_final(gkey):
     dirname = f"{cn}-{ind}"
     if not isdir(dirname):
         mkdir(dirname)
-
-    [gc], orient = nelson_gc_to_sage_gc(gauss_codes.gknot[gkey])
+    if use_nelson_gcs:
+        [gc], orient = nelson_gc_to_sage_gc(gauss_codes.gknot[gkey])
+    else:
+        [gc], orient = gc11.gknot[gkey]
 
     K = Knot([[gc], orient])
     crossings, semiarcs = knot_to_layout(K)
@@ -917,24 +929,10 @@ def plot_final(gkey):
 
 
 def compile_single_file(fname):
-
+    # print(fname)
     # run(["pdflatex", fname])
-    run(
-        [
-            # "true",
-            # "|",
-            # ":",
-            # "|",
-            "pdflatex",
-            "-halt-on-error",
-            fname,
-            "|",
-            "grep",
-            "'^!.*'",
-            "-A200",
-            "--color=always",
-        ]
-    )
+    run(["pdflatex", fname], capture_output=True)
+    return
 
 
 def convert_single_file(fname):
@@ -994,14 +992,23 @@ def amalgamate(dirname, re_png=False, gif=False, mp4=True):
         )
 
 
+def get_linear_diagram(gkey):
+    """
+    Constructs the linear diagram in TikZ by just plotting the final
+    frame of the movie
+    """
+    print(gkey)
+    cn, ind = gkey
+    dirname = f"{cn}-{ind}"
+    plot_final(gkey)
+    chdir(dirname)
+    compile_final()
+    run(["mv", "999.tex", f"../finals/{dirname}.tex"])
+    run(["mv", "999.pdf", f"../finals/{dirname}.pdf"])
+    chdir("..")
+    return
+
+
 if __name__ == "__main__":
-    for gkey in gauss_codes.gknot:
-        cn, ind = gkey
-        dirname = f"{cn}-{ind}"
-        plot_final(gkey)
-        chdir(dirname)
-        compile_final()
-        run(["mv", "999.tex", f"../finals/{dirname}.tex"])
-        run(["mv", "999.pdf", f"../finals/{dirname}.pdf"])
-        # amalgamate(dirname, re_png=True)
-        chdir("..")
+    with Pool(5) as p:
+        p.map(get_linear_diagram, gc11.gknot)

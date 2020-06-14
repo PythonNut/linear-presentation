@@ -55,11 +55,7 @@ def get_prefix(fname):
 
 
 # Filter for pdfs with a `-` in the name
-knots = [
-    fname
-    for fname in [fname for fname in listdir("finals") if ".pdf" in fname]
-    if "-" in fname
-]
+knots = [fname for fname in listdir("finals") if (".pdf" in fname) and ("-" in fname)]
 
 
 knots = sorted(knots, key=get_prefix)
@@ -73,8 +69,15 @@ out_str = r"""\documentclass{article}
 \usepackage{float}
 \usepackage{subcaption}
 \usepackage{graphicx}
+
 \allowdisplaybreaks
 \pagestyle{empty}
+
+\usepackage{xcolor} % For customizing page color and such
+\definecolor{bcol}{HTML}{1D252C}
+\definecolor{tcol}{HTML}{D6D7D9}
+\pagecolor{bcol}
+\color{tcol}
 """
 out_str += (
     "\\usepackage[margin=.5in, landscape, papersize={"
@@ -99,13 +102,13 @@ for row in range(l):
             fname = knots[index]
             label = get_prefix(fname)
 
-            out_str += r"\begin{subfigure}[H]{" + str(spacing) + r"\textwidth}" + "\n"
+            out_str += r"\begin{subfigure}[t]{" + str(spacing) + r"\textwidth}" + "\n"
             out_str += r"\centering" + "\n"
             out_str += r"\includegraphics[width = .95in]{" + fname + "}\n"
-            out_str += r"\caption{$" + f"{label}" + "$}" + "\n"
+            out_str += r"\caption*{$" + f"{label}" + "$}" + "\n"
             out_str += r"\end{subfigure}" + "\n"
 
-    out_str += "\\end{figure}\n"
+    out_str += "\\end{figure}\n\\vfill\n"
 out_str += r"\end{document}"
 
 with open("finals/mosaic.tex", "w") as f:
