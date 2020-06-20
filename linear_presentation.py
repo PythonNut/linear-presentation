@@ -485,13 +485,10 @@ def virtual_route(semiarcs):
     # assert abs(len(upper) - len(lower)) <= 1
 
     print(lower, upper[::-1])
-    upperset = set(upper)
-    lowerset = set(lower)
-    ul_int = upperset & lowerset
-    for num in ul_int:
+    for s in sorted(set(upper)):
         print(lower, upper[::-1])
-        delpop_upper(num)
-        delpop_lower(num)
+        upper = [p for p in upper if p != s]
+        lower = [p for p in lower if p != s]
         x += 1
 
     print(lower, upper[::-1])
