@@ -72,8 +72,10 @@ out_str = r"""\documentclass{article}
 
 \allowdisplaybreaks
 \pagestyle{empty}
+"""
 
-\usepackage{xcolor} % For customizing page color and such
+# Comment this out for standard colors:
+out_str += r"""\usepackage{xcolor} % For customizing page color and such
 \definecolor{bcol}{HTML}{1D252C}
 \definecolor{tcol}{HTML}{D6D7D9}
 \pagecolor{bcol}

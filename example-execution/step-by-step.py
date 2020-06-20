@@ -18,6 +18,8 @@ from multiprocessing import Pool
 # For executing the compile command
 from subprocess import run
 
+from ..linear_presentation import Dir, fix_gc_order
+
 
 class Dir(Enum):
     UP = 0
@@ -140,80 +142,6 @@ def compact_paths(paths, crossings=[]):
 
     new_crossings = [all_points.index(x) for x in crossings]
     return result, new_crossings
-
-
-def plot(upper_cs, lower_cs, crossings=[], straight=0):
-    def c_height(cs):
-        all_arcs = []
-        for arcs in cs.values():
-            all_arcs.extend(arcs)
-
-        dominate = {}
-
-        for a, b in all_arcs:
-            for c, d in all_arcs:
-                if a < c < d < b:
-                    dominate.setdefault((a, b), []).append((c, d))
-
-        height = {}
-        for a, b in sorted(all_arcs, key=lambda t: len(dominate.get(t, []))):
-            height[a, b] = 0
-            for dominated in dominate.get((a, b), []):
-                height[a, b] = max(height[a, b], height[dominated])
-
-            if b - a > 1:
-                height[a, b] += 1
-
-        return height
-
-    upper_heights = c_height(upper_cs)
-    lower_heights = c_height(lower_cs)
-
-    def add_arc(a, b, y=0, down=False):
-        h = abs(a - b)
-        if straight >= 3:
-            if down:
-                h = lower_heights[a, b]
-            else:
-                h = upper_heights[a, b]
-
-        if straight >= 1 and abs(a - b) <= 1:
-            plt.plot([a, b], [0, 0], "k")
-
-        elif straight >= 2:
-            if down:
-                plt.plot([a, a, b, b], [0, -h, -h, 0], "k")
-            else:
-                plt.plot([a, a, b, b], [0, h, h, 0], "k")
-
-        else:
-            c = (a + b) / 2
-            if down:
-                plt.gca().add_patch(mpl.patches.Arc((c, y), h, h, theta1=180))
-            else:
-                plt.gca().add_patch(mpl.patches.Arc((c, y), h, h, theta2=180))
-
-    for arcs in upper_cs.values():
-        for (a, b) in arcs:
-            add_arc(a, b, 0, False)
-
-    for arcs in lower_cs.values():
-        for (a, b) in arcs:
-            add_arc(a, b, 0, True)
-
-    # for i, path in enumerate(paths):
-    #     par = parity[i]
-    #     for j, (a, b) in enumerate(zip(path, path[1:])):
-    #         add_arc(a, b, 0, (par + j) % 2 == 0)
-
-    for x in crossings:
-        plt.plot([x - 1, x + 1], [0, 0], "k")
-
-    plt.gcf().set_size_inches(10.5, 18.5)
-    ax = plt.gcf().gca()
-    ax.set_aspect("equal", "box")
-    ax.set_axis_off()
-    plt.show()
 
 
 def nelson_gc_to_sage_gc(gc):
@@ -532,7 +460,7 @@ def route(semiarcs):
     return upper_cs, lower_cs, crossings, states
 
 
-def crossing_tex(cnum, orient, x, xcurr):
+def crossing_tex(cnum, orient, x, xcurr, add_labels=False):
     """
     `cnum`: an int representing which crossing we're drawing. cnum < 0
             corresponds to the horizontal strand being an understrand,
@@ -543,10 +471,10 @@ def crossing_tex(cnum, orient, x, xcurr):
     `xcurr`: the x value for the vertical dashed line
     """
     out_str = ""
-
+    gap = 0.45
     if cnum < 0:
-        out_str += f"    \\draw ({x - 1}, 0) -- ({x - .1}, 0);\n"
-        out_str += f"    \\draw[-latex] ({x + .1}, 0) -- ({x + .5}, 0);\n"
+        out_str += f"    \\draw ({x - 1}, 0) -- ({x - gap}, 0);\n"
+        out_str += f"    \\draw[-latex] ({x + gap}, 0) -- ({x + .5}, 0);\n"
         out_str += f"    \\draw ({x + .5}, 0) -- ({x + 1}, 0);\n"
         if orient == 1:
             out_str += f"    \\draw[-latex] ({x}, .5) -- ({x}, -.5);\n"
@@ -557,52 +485,54 @@ def crossing_tex(cnum, orient, x, xcurr):
     else:
         out_str += f"    \\draw[-latex] ({x -1}, 0) -- ({x + 1}, 0);\n"
         if orient == 1:
-            out_str += f"    \\draw ({x}, -.5) -- ({x}, -.1);\n"
-            out_str += f"    \\draw[-latex] ({x}, .1) -- ({x}, .5);\n"
+            out_str += f"    \\draw ({x}, -.5) -- ({x}, -{gap});\n"
+            out_str += f"    \\draw[-latex] ({x}, {gap}) -- ({x}, .5);\n"
         elif orient == -1:
-            out_str += f"    \\draw ({x}, .5) -- ({x}, .1);\n"
-            out_str += f"    \\draw[-latex] ({x}, -.1) -- ({x}, -.5);\n"
+            out_str += f"    \\draw ({x}, .5) -- ({x}, {gap});\n"
+            out_str += f"    \\draw[-latex] ({x}, -{gap}) -- ({x}, -.5);\n"
         else:
             assert False
 
-    lab = f"$\\small {abs(cnum)}"
-    if cnum < 0:
-        lab += "_u"
-    else:
-        lab += "_o"
+    if add_labels:
 
-    if orient == 1:
-        lab += "^+"
-    else:
-        lab += "^-"
+        lab = f"$\\small {abs(cnum)}"
+        if cnum < 0:
+            lab += "_u"
+        else:
+            lab += "_o"
 
-    lab += "$"
+        if orient == 1:
+            lab += "^+"
+        else:
+            lab += "^-"
 
-    if orient == 1:
-        out_str += (
-            f"    \\node[circle, fill=black, draw=black, inner sep=1pt] ({abs(cnum)}circ) at ({x}, 0) "
-            + "{};\n"
-        )
+        lab += "$"
 
-        out_str += (
-            f"    \\node[above left] ({abs(cnum)}lab) at ({abs(cnum)}circ) "
-            + "{"
-            + lab
-            + "};\n"
-        )
+        if orient == 1:
+            out_str += (
+                f"    \\node[circle, fill=black, draw=black, inner sep=1pt] ({abs(cnum)}circ) at ({x}, 0) "
+                + "{};\n"
+            )
 
-    else:
-        out_str += (
-            f"    \\node[circle, fill=white, draw=black, inner sep=1pt] ({abs(cnum)}circ) at ({x}, 0) "
-            + "{};\n"
-        )
+            out_str += (
+                f"    \\node[above left] ({abs(cnum)}lab) at ({x}, 0) "
+                + "{"
+                + lab
+                + "};\n"
+            )
 
-        out_str += (
-            f"    \\node[above left] ({abs(cnum)}lab) at ({abs(cnum)}circ) "
-            + "{"
-            + lab
-            + "};\n"
-        )
+        else:
+            out_str += (
+                f"    \\node[circle, fill=white, draw=black, inner sep=1pt] ({abs(cnum)}circ) at ({x}, 0) "
+                + "{};\n"
+            )
+
+            out_str += (
+                f"    \\node[above left] ({abs(cnum)}lab) at ({x}, 0) "
+                + "{"
+                + lab
+                + "};\n"
+            )
 
     return out_str
 
@@ -617,7 +547,9 @@ def get_thalf(x0, x1, xcurr):
     return gp(180 * arccos(arg) / pi)  # convert to degrees and cast to float
 
 
-def arc_tex(x0, x1, xcurr, y, s, x0_through=False, x1_through=False):
+def arc_tex(
+    x0, x1, xcurr, y, s, x0_through=False, x1_through=False, label_semiarcs=False
+):
     """
 
     """
@@ -631,20 +563,22 @@ def arc_tex(x0, x1, xcurr, y, s, x0_through=False, x1_through=False):
         else:
             nstyle = ""
 
-        if r == 0.5:
-            out_str += (
-                f"    \\node[above{nstyle}] ({s}lab) at ({xavg}, 0) "
-                + "{$s_{"
-                + str(s)
-                + "}$};\n"
-            )
-        else:
-            out_str += (
-                f"    \\node[above{nstyle}] ({s}lab) at ({(x1+x0)/2}, {r+.5}) "
-                + "{$s_{"
-                + str(s)
-                + "}$};\n"
-            )
+        if label_semiarcs:
+
+            if r == 0.5:
+                out_str += (
+                    f"    \\node[above{nstyle}] ({s}lab) at ({xavg}, 0) "
+                    + "{$s_{"
+                    + str(s)
+                    + "}$};\n"
+                )
+            else:
+                out_str += (
+                    f"    \\node[above{nstyle}] ({s}lab) at ({(x1+x0)/2}, {r+.5}) "
+                    + "{$s_{"
+                    + str(s)
+                    + "}$};\n"
+                )
 
     # Handle the arcs that connect things directly along the horizontal
     if r == 0.5:
@@ -773,7 +707,7 @@ def plot_one_step(
 \color{tcol}"""
 
     out_str += r"""\begin{document}
-  \begin{tikzpicture}[every draw/.style={line width=.8pt}]
+  \begin{tikzpicture}[every draw/.style={line width=20pt}]
     """
     x, upper, lower, upper_cs, lower_cs, crossings = state
     # print(state)
@@ -1009,6 +943,98 @@ def get_linear_diagram(gkey):
     return
 
 
+def get_prefix(fname):
+    """
+    Given something like
+        `3-1.pdf`
+    Extract and return the tuple
+        `(3,1)`
+    """
+    # Crossing number and index of knot in rolfsen table.
+    # OK: the `.split(".")[0]` gets the portion before the
+    # `.pdf` in the filename.
+    #
+    # The .split("-") separates the two pieces of data (e.g.,
+    # "8-18" gets split to ["8", "18"])
+    #
+    # The list comprehension is just to convert both to ints.
+    return tuple([int(glyph) for glyph in fname.split(".")[0].split("-")])
+
+
+def make_mosaic():
+    from math import ceil, sqrt
+
+    # Filter for pdfs with a `-` in the name
+    knots = [
+        fname for fname in listdir("finals") if (".pdf" in fname) and ("-" in fname)
+    ]
+
+    knots = sorted(knots, key=get_prefix)
+
+    l = ceil(sqrt(len(knots)))
+    spacing = 0.9 / l
+
+    out_str = r"""\documentclass{article}
+    \usepackage{fkmath}
+    \usepackage{float}
+    \usepackage{subcaption}
+    \usepackage{graphicx}
+
+    \allowdisplaybreaks
+    \pagestyle{empty}
+    """
+
+    # Comment this out for standard colors:
+    out_str += r"""\usepackage{xcolor} % For customizing page color and such
+    \definecolor{bcol}{HTML}{1D252C}
+    \definecolor{tcol}{HTML}{D6D7D9}
+    \pagecolor{bcol}
+    \color{tcol}
+    """
+    out_str += (
+        "\\usepackage[margin=.5in, landscape, papersize={"
+        + str(1 + 2 * l)
+        + "in, "
+        + str(1 + 2 * l)
+        + "in}]{geometry}"
+    )
+
+    out_str += r"\begin{document}"
+
+    # Lay out the knots in a grid table
+    for row in range(l):
+        out_str += "\\begin{figure}[H]\n\\centering\n"
+        for col in range(l):
+            index = row * l + col
+            if index == len(knots):
+                out_str += r"\hfill"
+            elif index > len(knots):
+                continue
+            else:
+                fname = knots[index]
+                label = get_prefix(fname)
+
+                out_str += (
+                    r"\begin{subfigure}[t]{" + str(spacing) + r"\textwidth}" + "\n"
+                )
+                out_str += r"\centering" + "\n"
+                out_str += r"\includegraphics[width = .95in]{" + fname + "}\n"
+                out_str += r"\caption*{$" + f"{label}" + "$}" + "\n"
+                out_str += r"\end{subfigure}" + "\n"
+
+        out_str += "\\end{figure}\n\\vfill\n"
+    out_str += r"\end{document}"
+
+    with open("finals/mosaic.tex", "w") as f:
+        f.write(out_str)
+
+    chdir("finals")
+    run(["pdflatex", "mosaic.tex"])
+    chdir("..")
+
+
 if __name__ == "__main__":
-    with Pool(5) as p:
+    with Pool(7) as p:
         p.map(get_linear_diagram, gc11.gknot)
+
+    make_mosaic()
