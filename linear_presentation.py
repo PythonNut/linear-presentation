@@ -402,7 +402,7 @@ def virtual_route(semiarcs):
             semiarc_map[(i, Dir.RIGHT)],
         )
 
-        print(i, "R  ", upper, lower, R)
+        print(i, "R  ", lower, upper[::-1], R)
 
         # If we're coming in from the left and have to unnest a bunch
         # of arcs on the top, then do it
@@ -415,13 +415,6 @@ def virtual_route(semiarcs):
 
             pop_upper(L)
 
-        # Same but if on bottom
-        # elif L in lower:
-        #     while not peek(lower, L):
-        #         push_upper(pop_lower())
-        #         x += 1
-        #     pop_lower()
-        #     x += 1
         elif L in lower:
             while not peek(lower, L):
                 push_or_pop_upper(pop_lower())
@@ -429,15 +422,13 @@ def virtual_route(semiarcs):
 
             pop_lower(L)
 
-        print(i, "U,D", upper, lower, U, D)
+        print(i, "U,D", lower, upper[::-1], U, D)
 
         x += 1
 
         # Handle the vertical strands
         if U in upper:
             delpop_upper(U)
-        # elif U in lower:
-        #     x += .5
         else:
             push_upper(U)
 
@@ -450,7 +441,7 @@ def virtual_route(semiarcs):
 
         x += 1
 
-        print(i, "R  ", upper, lower, R)
+        print(i, "R  ", lower, upper[::-1], R)
 
         # This should only happen for the final strand
         if R in upper:
@@ -466,7 +457,7 @@ def virtual_route(semiarcs):
 
             # ((i + 1) % n) + 1 gets us the next crossing, rolling
             # over to crossing 1 if we're on the final crossing.
-            print((i % n + 1))
+            # print((i % n + 1))
             assert ((i % n) + 1, Dir.LEFT) in semiarc_map
             L2 = semiarc_map[((i % n) + 1), Dir.LEFT]
 
@@ -486,17 +477,21 @@ def virtual_route(semiarcs):
 
         x += 1
 
-    print(upper, lower)
-
     # The only things remaining in the stacks at this point should be
     #   (a) the copy of the first crossing's left strand (recall we pushed it
     #       once to each stack), and
     #   (b) strands that go around the right endpoint of the spine.
     # Hence, abs(len(upper) - len(lower)) <= 1.
     # assert abs(len(upper) - len(lower)) <= 1
-    while upper and lower:
+
+    print(lower, upper[::-1])
+    upperset = set(upper)
+    lowerset = set(lower)
+    ul_int = upperset & lowerset
+    for num in ul_int:
         print(lower, upper[::-1])
-        assert pop_upper() == pop_lower()
+        delpop_upper(num)
+        delpop_lower(num)
         x += 1
 
     print(lower, upper[::-1])
@@ -852,22 +847,27 @@ if __name__ == "__main__":
     # crossings, semiarcs = knot_to_layout(K)
     import gauss_codes
 
-    # gc = gauss_codes.gknot[(8, 1)]
-    # gc = [-1, 2, 1, -2]
-    gc = [1.5, 2, -1.5, 3.5, -2, -3.5]
-    # gc = gauss_codes.conn_sum(gauss_codes.gknot[10, 132], gauss_codes.gknot[8, 19])
-    # gc = gauss_codes.conn_sum(gc, gauss_codes.gknot[6, 2], ind=10)
-    # gc = gauss_codes.conn_sum(gc, gauss_codes.gknot[8, 13], ind=5)
-    # K = Knot(nelson_gc_to_sage_gc(gc))
-    K = Knot(nelson_gc_to_sage_gc(gc))
+    for key in (
+        [(4, i) for i in range(82, 91)] + [(4, i) for i in range(96, 99)] + [(4, 107)]
+    ):  # gauss_codes.vknot.keys():
+        gc = gauss_codes.vknot[(key)]
+        # gc = gauss_codes.conn_sum(gauss_codes.gknot[10, 132], gauss_codes.gknot[8, 19])
+        # gc = gauss_codes.conn_sum(gc, gauss_codes.gknot[6, 2], ind=10)
+        # gc = gauss_codes.conn_sum(gc, gauss_codes.gknot[8, 13], ind=5)
+        # K = Knot(nelson_gc_to_sage_gc(gc))
+        K = Knot(nelson_gc_to_sage_gc(gc))
 
-    crossings, semiarcs = knot_to_layout(K)
-    pp = PrettyPrinter(width=70, compact=True)
-    pp.pprint(crossings)
-    pp.pprint(semiarcs)
+        print(key)
+        crossings, semiarcs = knot_to_layout(K)
+        # pp = PrettyPrinter(width=70, compact=True)
+        # pp.pprint(crossings)
+        # pp.pprint(semiarcs)
 
-    upper_cs, lower_cs, crossings = virtual_route(semiarcs)
-    plot(upper_cs, lower_cs, crossings, straight=0)
+        try:
+            upper_cs, lower_cs, crossings = virtual_route(semiarcs)
+        except AssertionError as e:
+            raise (e)
+        plot(upper_cs, lower_cs, crossings, straight=0)
 
     # for name, n_gc in gauss_codes.gknot.items():
     #     print("="*10 + " " + str(name))
