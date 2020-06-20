@@ -137,3 +137,5 @@ example-execution/**
 
 # Emacs auto-generated files
 **/auto/*
+
+.DS_Store
