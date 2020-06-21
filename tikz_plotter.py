@@ -103,10 +103,10 @@ def arc_tex(
     xavg = (x1 + x0) / 2
 
     if y > 0:
-        if xcurr < x1:
-            nstyle = ", opacity=.2"
-        else:
-            nstyle = ""
+        # if xcurr < x1:
+        #     nstyle = ", opacity=.2"
+        # else:
+        nstyle = ""
 
         if label_semiarcs:
 
@@ -127,13 +127,13 @@ def arc_tex(
 
     # Handle the arcs that connect things directly along the horizontal
     if r == 0.5:
-        if xcurr < x0:
-            out_str += f"    \\draw[opacity=.2] ({x0-.5}, 0) -- ({x1+.5}, 0);\n"
-        elif x1 < xcurr:
-            out_str += f"    \\draw ({x0 - .5}, 0) -- ({x1 + .5}, 0);\n"
-        else:
-            out_str += f"    \\draw ({x0 - .5}, 0) -- ({xcurr}, 0);\n"
-            out_str += f"    \\draw[opacity=.2] ({xcurr}, 0) -- ({x1 + .5}, 0);\n"
+        # if xcurr < x0:
+        #     out_str += f"    \\draw[opacity=.2] ({x0-.5}, 0) -- ({x1+.5}, 0);\n"
+        # elif x1 < xcurr:
+        out_str += f"    \\draw ({x0 - .5}, 0) -- ({x1 + .5}, 0);\n"
+        # else:
+        #     out_str += f"    \\draw ({x0 - .5}, 0) -- ({xcurr}, 0);\n"
+        #     out_str += f"    \\draw[opacity=.2] ({xcurr}, 0) -- ({x1 + .5}, 0);\n"
         return out_str
 
     if x0 < x1:
@@ -151,7 +151,7 @@ def arc_tex(
     # elif xcurr < x1:
     #     # Find the angle to draw until such that our arc meets the
     #     # dotted line
-    #     thalf = get_thalf(x0, x1, xcurr)
+    #     thalf =
     #     out_str += f"    \\draw[opacity=.6] ({x0},  {y}) arc ({t0}:{thalf}:{r});\n"
     #     out_str += f"    \\draw[opacity=.2] ({x1},  {y}) arc ({t1}:{thalf}:{r});\n"
 
@@ -359,6 +359,12 @@ def circle_int_point(xl1, xr1, xl2, xr2):
 
     d = abs(c2 - c1)
 
+    try:
+        assert d != 0
+    except AssertionError as e:
+        print(f"xl1: {xl1}, xr1: {xr1}\nxl2: {xl2}, xr2: {xr2}")
+        raise (e)
+
     xint = (d ** 2 - r2 ** 2 + r1 ** 2) / (2 * d) + c1  # - 0.5
     yint = (
         sqrt(abs(4 * (d ** 2) * (r1 ** 2) - (d ** 2 - r2 ** 2 + r1 ** 2) ** 2))
@@ -381,11 +387,9 @@ def compute_intersections(upper_cs, lower_cs):
         all_upper.extend(upper_cs[key])
 
     for (xl1, xr1), (xl2, xr2) in it.combinations(all_upper, 2):
-        if (xl1, xr1) == (xl2, xr2):
+        if (xl1 <= xl2) and (xr2 <= xr1):
             continue
-        elif (xl1 < xl2) and (xr2 < xr1):
-            continue
-        elif (xl2 < xl1) and (xr2 < xr1):
+        elif (xl2 < xl1) and (xr1 < xr2):
             continue
         elif (xr1 < xl2) or (xr2 < xl1):
             continue
@@ -397,11 +401,9 @@ def compute_intersections(upper_cs, lower_cs):
         all_lower.extend(lower_cs[key])
 
     for (xl1, xr1), (xl2, xr2) in it.combinations(all_lower, 2):
-        if (xl1, xr1) == (xl2, xr2):
+        if (xl1 <= xl2) and (xr2 <= xr1):
             continue
-        elif (xl1 < xl2) and (xr2 < xr1):
-            continue
-        elif (xl2 < xl1) and (xr2 < xr1):
+        elif (xl2 < xl1) and (xr1 < xr2):
             continue
         elif (xr1 < xl2) or (xr2 < xl1):
             continue

@@ -6,6 +6,8 @@ import matplotlib as mpl
 
 from tqdm import tqdm
 
+from multiprocessing import Pool
+
 
 class Dir(Enum):
     UP = 0
@@ -193,11 +195,6 @@ def plot(upper_cs, lower_cs, crossings=[], straight=0):
     for arcs in lower_cs.values():
         for (a, b) in arcs:
             add_arc(a, b, 0, True)
-
-    # for i, path in enumerate(paths):
-    #     par = parity[i]
-    #     for j, (a, b) in enumerate(zip(path, path[1:])):
-    #         add_arc(a, b, 0, (par + j) % 2 == 0)
 
     for x in crossings:
         plt.plot([x - 1, x + 1], [0, 0], "k")
@@ -401,8 +398,8 @@ def virtual_route(semiarcs):
         # print(i, "R  ", lower, upper[::-1], R)
 
         if L in upper:
-            Lind = upper.index(L)
 
+            Lind = upper.index(L)
             if U not in upper and U in lower:
                 delpop_lower(U)
 
@@ -415,6 +412,7 @@ def virtual_route(semiarcs):
                 upper.remove(U)
                 upper.insert(Lind - 1, U)
 
+            # Process D first to help with some of the near-triple points
             Lind = upper.index(L)
             if D not in lower and D in upper and upper.index(D) < Lind:
                 upper.remove(D)
@@ -425,7 +423,6 @@ def virtual_route(semiarcs):
             while not peek(upper, L):
                 push_or_pop_lower(pop_upper())
                 x += 1
-
             # print(L, D)
 
             pop_upper(L)
@@ -460,15 +457,15 @@ def virtual_route(semiarcs):
         x += 1
 
         # Handle the vertical strands
-        if U in upper:
-            delpop_upper(U)
-        else:
-            push_upper(U)
-
         if D in lower:
             delpop_lower(D)
         else:
             push_lower(D)
+
+        if U in upper:
+            delpop_upper(U)
+        else:
+            push_upper(U)
 
         crossings.append(x)
 
@@ -788,34 +785,46 @@ def route(semiarcs):
     return upper_cs, lower_cs, crossings
 
 
-if __name__ == "__main__":
-    import gauss_codes
-    from tikz_plotter import plot_virtual, virtual_mosaic
+def get_vknots(max_cnum=5):
+    from data.virtual_gauss_codes import vknot
 
-    for key in tqdm(gauss_codes.vknot.keys()):
-        gc = gauss_codes.vknot[(key)]
-        # gc = gauss_codes.conn_sum(gauss_codes.gknot[10, 132], gauss_codes.gknot[8, 19])
-        # gc = gauss_codes.conn_sum(gc, gauss_codes.gknot[6, 2], ind=10)
-        # gc = gauss_codes.conn_sum(gc, gauss_codes.gknot[8, 13], ind=5)
-        K = Knot(nelson_gc_to_sage_gc(gc))
-        # K = Knot([gc], orient)
+    return dict(filter(lambda key: key[0][0] <= max_cnum, vknot.items()))
 
-        # print(key)
-        crossings, semiarcs = knot_to_layout(K)
 
-        try:
-            upper_cs, lower_cs, crossings = virtual_route(semiarcs)
-        except AssertionError as e:
-            raise (e)
-        # print(upper_cs)
-        # print(lower_cs)
-        # print(crossings)
-        # plot(upper_cs, lower_cs, crossings, straight=0)
-        [gc], orient = nelson_gc_to_sage_gc(gc)
-        cn, kind = key
-        dirname = f"{cn}-{kind}"
+def proc_single_vknot(key):
+    global knot_dict
+    gc = knot_dict[key]
+    K = Knot(nelson_gc_to_sage_gc(gc))
+    crossings, semiarcs = knot_to_layout(K)
+
+    try:
+        upper_cs, lower_cs, crossings = virtual_route(semiarcs)
+    except AssertionError as e:
+        print(key)
+        raise (e)
+
+    [gc], orient = nelson_gc_to_sage_gc(gc)
+    cn, kind = key
+    dirname = f"{cn}-{kind}"
+    try:
         plot_virtual(
             gc, orient, upper_cs, lower_cs, crossings, dirname, use_fk_colors=False,
         )
-    print(os.getcwd())
+    except ZeroDivisionError as e:
+        print(key)
+        raise (e)
+
+
+if __name__ == "__main__":
+
+    from tikz_plotter import plot_virtual, virtual_mosaic
+
+    global knot_dict
+    knot_dict = get_vknots(max_cnum=5)
+    _n = len(knot_dict)
+    with Pool(6) as p:
+        with tqdm(total=_n) as pbar:
+            for i, _ in enumerate(p.imap_unordered(proc_single_vknot, knot_dict)):
+                pbar.update()
+
     virtual_mosaic()
