@@ -815,10 +815,7 @@ def proc_single_vknot(key):
         raise (e)
 
 
-if __name__ == "__main__":
-
-    from tikz_plotter import plot_virtual, virtual_mosaic
-
+def main():
     global knot_dict
     knot_dict = get_vknots(max_cnum=5)
     _n = len(knot_dict)
@@ -828,3 +825,9 @@ if __name__ == "__main__":
                 pbar.update()
 
     virtual_mosaic()
+
+
+if __name__ == "__main__":
+    from tikz_plotter import plot_virtual, virtual_mosaic
+
+    main()

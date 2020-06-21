@@ -15,7 +15,7 @@ def crossing_tex(cnum, orient, x, xcurr, add_labels=False):
     `xcurr`: the x value for the vertical dashed line
     """
     out_str = ""
-    gap = 0.3
+    gap = 0.2
     if cnum < 0:
         out_str += f"    \\draw ({x - 1}, 0) -- ({x - gap}, 0);\n"
         out_str += f"    \\draw[-latex] ({x + gap}, 0) -- ({x + .5}, 0);\n"
@@ -27,7 +27,7 @@ def crossing_tex(cnum, orient, x, xcurr, add_labels=False):
         else:
             assert False
     else:
-        out_str += f"    \\draw[-latex] ({x -1}, 0) -- ({x + 1}, 0);\n"
+        out_str += f"    \\draw ({x -1}, 0) -- ({x + 1}, 0);\n"
         out_str += f"    \\draw[-latex] ({x + gap}, 0) -- ({x + .5}, 0);\n"
         if orient == 1:
             out_str += f"    \\draw ({x}, -.5) -- ({x}, -{gap});\n"
@@ -462,6 +462,8 @@ def plot_virtual(
     x = max(x_vals)
 
     int_pts = compute_intersections(upper_cs, lower_cs)
+    if not int_pts:
+        print(f"knot {dirname} had no virtual crossings!")
     for (x, y) in int_pts:
         out_str += f"\\draw ({x}, {y}) circle (.25);\n"
 
@@ -538,6 +540,7 @@ def plot_virtual(
     with open(fname, "w") as f:
         f.write(out_str)
 
+    # pdflatex seems to be faster than lua for these files
     subprocess.run(["pdflatex", fname], capture_output=True)
     os.chdir("../../..")
 
@@ -631,8 +634,8 @@ def virtual_mosaic():
     with open("virtual_mosaic.tex", "w") as f:
         f.write(out_str)
 
-    # os.chdir("example-execution/")
-    subprocess.run(["pdflatex", "virtual_mosaic.tex"], capture_output=True)
+    # Use lualatex in case the mosaic exceeds pdflatex memory limit
+    subprocess.run(["lualatex", "virtual_mosaic.tex"], capture_output=True)
     os.chdir("../..")
 
     return
