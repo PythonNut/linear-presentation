@@ -404,23 +404,91 @@ def virtual_route(semiarcs):
 
         print(i, "R  ", lower, upper[::-1], R)
 
-        # If we're coming in from the left and have to unnest a bunch
-        # of arcs on the top, then do it
         if L in upper:
+            Lind = upper.index(L)
+
+            if U not in upper and U in lower:
+                delpop_lower(U)
+
+                # We want to insert U in the stack before L
+                upper_cs.setdefault(U, []).append(x)
+                upper.insert(Lind - 1, U)
+                x += 1
+
+            elif U not in lower and U in upper and upper.index(U) > Lind:
+                upper.remove(U)
+                upper.insert(Lind - 1, U)
+                x += 1
+
+            if D not in lower and D in upper and upper.index(D) < Lind:
+                upper.remove(D)
+                upper.insert(Lind, D)
+                x += 1
+
+            # elif D in lower and lower.index(D) > Lind:
+            #     lower.remove(D)
+            #     lower.insert(Lind, D)
+            #     x += 1
+
             # Move stuff from upper to lower until we get to the
             # desired element
             while not peek(upper, L):
                 push_or_pop_lower(pop_upper())
                 x += 1
 
+            print(L, D)
+
+            # print(L, U)
             pop_upper(L)
 
         elif L in lower:
+            Lind = lower.index(L)
+            if D not in lower and D in upper:
+                delpop_upper(D)
+                lower_cs.setdefault(D, []).append(x)
+                lower.insert(Lind - 1, D)
+                x += 1
+
+            elif D not in upper and D in lower and lower.index(D) > Lind:
+                lower.remove(D)
+                lower.insert(Lind - 1, D)
+
+            if U not in upper and U in lower and lower.index(U) < Lind:
+                lower.remove(U)
+                lower.insert(Lind, U)
+                x += 1
+
+            # elif U in lower and lower.index(U) > Lind:
+            #     lower.remove(U)
+            #     lower.insert(Lind, U)
+            #     x += 1
+
+            print(L, D)
+
             while not peek(lower, L):
                 push_or_pop_upper(pop_lower())
                 x += 1
 
+            # pop_upper(L)
             pop_lower(L)
+
+        # If we're coming in from the left and have to unnest a bunch
+        # of arcs on the top, then do it
+        # if L in upper:
+        #     # Move stuff from upper to lower until we get to the
+        #     # desired element
+        #     while not peek(upper, L):
+        #         push_or_pop_lower(pop_upper())
+        #         x += 1
+
+        #     pop_upper(L)
+
+        # elif L in lower:
+        #     while not peek(lower, L):
+        #         push_or_pop_upper(pop_lower())
+        #         x += 1
+
+        #     pop_lower(L)
 
         print(i, "U,D", lower, upper[::-1], U, D)
 
@@ -845,8 +913,10 @@ if __name__ == "__main__":
     import gauss_codes
 
     for key in (
-        [(4, i) for i in range(82, 91)] + [(4, i) for i in range(96, 99)] + [(4, 107)]
-    ):  # gauss_codes.vknot.keys():
+        # [(4, i) for i in range(82, 91)] + [(4, i) for i in range(96, 99)] + [(4, 107)]
+        # [(4, 84 + i * 0.25) for i in range(4)]
+        gauss_codes.vknot.keys()
+    ):
         gc = gauss_codes.vknot[(key)]
         # gc = gauss_codes.conn_sum(gauss_codes.gknot[10, 132], gauss_codes.gknot[8, 19])
         # gc = gauss_codes.conn_sum(gc, gauss_codes.gknot[6, 2], ind=10)
