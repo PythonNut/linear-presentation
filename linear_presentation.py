@@ -406,6 +406,9 @@ def virtual_route(semiarcs):
 
         if L in upper:
             Lind = upper.index(L)
+            # print("L in upper!")
+            # print(L, U, D)
+            # print(lower, upper[::-1])
 
             if U not in upper and U in lower:
                 delpop_lower(U)
@@ -414,16 +417,22 @@ def virtual_route(semiarcs):
                 upper_cs.setdefault(U, []).append(x)
                 upper.insert(Lind - 1, U)
                 x += 1
-
+                # print("U not in upper, U in lower")
+                # print(lower, upper[::-1])
             elif U not in lower and U in upper and upper.index(U) > Lind:
                 upper.remove(U)
                 upper.insert(Lind - 1, U)
-                x += 1
+                # x += 1
+                # print("elif case")
+                # print(lower, upper[::-1])
 
+            Lind = upper.index(L)
             if D not in lower and D in upper and upper.index(D) < Lind:
+                # print("D not in lower blah blah")
                 upper.remove(D)
                 upper.insert(Lind, D)
-                x += 1
+                # x += 1
+                # print(lower, upper[::-1])
 
             # elif D in lower and lower.index(D) > Lind:
             #     lower.remove(D)
@@ -453,10 +462,11 @@ def virtual_route(semiarcs):
                 lower.remove(D)
                 lower.insert(Lind - 1, D)
 
+            Lind = lower.index(L)
             if U not in upper and U in lower and lower.index(U) < Lind:
                 lower.remove(U)
                 lower.insert(Lind, U)
-                x += 1
+                # x += 1
 
             # elif U in lower and lower.index(U) > Lind:
             #     lower.remove(U)
@@ -915,6 +925,7 @@ if __name__ == "__main__":
     for key in (
         # [(4, i) for i in range(82, 91)] + [(4, i) for i in range(96, 99)] + [(4, 107)]
         # [(4, 84 + i * 0.25) for i in range(4)]
+        # (4, 26),
         gauss_codes.vknot.keys()
     ):
         gc = gauss_codes.vknot[(key)]
