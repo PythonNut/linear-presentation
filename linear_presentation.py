@@ -4,7 +4,7 @@ import itertools as it
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
-from pprint import PrettyPrinter as PrettyPrinter
+from tqdm import tqdm
 
 
 class Dir(Enum):
@@ -328,10 +328,6 @@ def virtual_route(semiarcs):
         else:
             push_lower(s)
 
-    def test_lower(s):
-        if peek(lower, s):
-            print("hi")
-
     def delpop_lower(s):
         """
         Remove the first occurence of s from lower, acting as if we
@@ -402,13 +398,10 @@ def virtual_route(semiarcs):
             semiarc_map[(i, Dir.RIGHT)],
         )
 
-        print(i, "R  ", lower, upper[::-1], R)
+        # print(i, "R  ", lower, upper[::-1], R)
 
         if L in upper:
             Lind = upper.index(L)
-            # print("L in upper!")
-            # print(L, U, D)
-            # print(lower, upper[::-1])
 
             if U not in upper and U in lower:
                 delpop_lower(U)
@@ -417,27 +410,15 @@ def virtual_route(semiarcs):
                 upper_cs.setdefault(U, []).append(x)
                 upper.insert(Lind - 1, U)
                 x += 1
-                # print("U not in upper, U in lower")
-                # print(lower, upper[::-1])
+
             elif U not in lower and U in upper and upper.index(U) > Lind:
                 upper.remove(U)
                 upper.insert(Lind - 1, U)
-                # x += 1
-                # print("elif case")
-                # print(lower, upper[::-1])
 
             Lind = upper.index(L)
             if D not in lower and D in upper and upper.index(D) < Lind:
-                # print("D not in lower blah blah")
                 upper.remove(D)
                 upper.insert(Lind, D)
-                # x += 1
-                # print(lower, upper[::-1])
-
-            # elif D in lower and lower.index(D) > Lind:
-            #     lower.remove(D)
-            #     lower.insert(Lind, D)
-            #     x += 1
 
             # Move stuff from upper to lower until we get to the
             # desired element
@@ -445,9 +426,8 @@ def virtual_route(semiarcs):
                 push_or_pop_lower(pop_upper())
                 x += 1
 
-            print(L, D)
+            # print(L, D)
 
-            # print(L, U)
             pop_upper(L)
 
         elif L in lower:
@@ -466,41 +446,16 @@ def virtual_route(semiarcs):
             if U not in upper and U in lower and lower.index(U) < Lind:
                 lower.remove(U)
                 lower.insert(Lind, U)
-                # x += 1
 
-            # elif U in lower and lower.index(U) > Lind:
-            #     lower.remove(U)
-            #     lower.insert(Lind, U)
-            #     x += 1
-
-            print(L, D)
+            # print(L, D)
 
             while not peek(lower, L):
                 push_or_pop_upper(pop_lower())
                 x += 1
 
-            # pop_upper(L)
             pop_lower(L)
 
-        # If we're coming in from the left and have to unnest a bunch
-        # of arcs on the top, then do it
-        # if L in upper:
-        #     # Move stuff from upper to lower until we get to the
-        #     # desired element
-        #     while not peek(upper, L):
-        #         push_or_pop_lower(pop_upper())
-        #         x += 1
-
-        #     pop_upper(L)
-
-        # elif L in lower:
-        #     while not peek(lower, L):
-        #         push_or_pop_upper(pop_lower())
-        #         x += 1
-
-        #     pop_lower(L)
-
-        print(i, "U,D", lower, upper[::-1], U, D)
+        # print(i, "U,D", lower, upper[::-1], U, D)
 
         x += 1
 
@@ -519,7 +474,7 @@ def virtual_route(semiarcs):
 
         x += 1
 
-        print(i, "R  ", lower, upper[::-1], R)
+        # print(i, "R  ", lower, upper[::-1], R)
 
         # This should only happen for the final strand
         if R in upper:
@@ -527,11 +482,6 @@ def virtual_route(semiarcs):
         elif R in lower:
             delpop_lower(R)
         else:
-            # if peek(upper, R):
-            #     pop_upper(R)
-            # elif peek(lower, R):
-            #     pop_lower(R)
-            # else:
 
             # ((i + 1) % n) + 1 gets us the next crossing, rolling
             # over to crossing 1 if we're on the final crossing.
@@ -562,14 +512,14 @@ def virtual_route(semiarcs):
     # Hence, abs(len(upper) - len(lower)) <= 1.
     # assert abs(len(upper) - len(lower)) <= 1
 
-    print(lower, upper[::-1])
+    # print(lower, upper[::-1])
     for s in sorted(set(upper)):
-        print(lower, upper[::-1])
+        # print(lower, upper[::-1])
         upper = [p for p in upper if p != s]
         lower = [p for p in lower if p != s]
         x += 1
 
-    print(lower, upper[::-1])
+    # print(lower, upper[::-1])
 
     # Cleanup the "leftover" return c
     if peek(upper, semiarc_map[1, Dir.LEFT]):
@@ -577,7 +527,7 @@ def virtual_route(semiarcs):
     elif peek(lower, semiarc_map[1, Dir.LEFT]):
         lower.pop()
 
-    print(lower, upper[::-1])
+    # print(lower, upper[::-1])
 
     # Ensure that there's nothing else remaining to pop.
     # assert upper == lower == []
@@ -704,7 +654,7 @@ def route(semiarcs):
         # l is the ID of the semiarc entering crossing i from the left.
         l = semiarc_map[i, Dir.LEFT]
 
-        print(x, 1, lower, upper[::-1], l)
+        # print(x, 1, lower, upper[::-1], l)
 
         # If this assertion fails, we would need to push the semiarc.
         # (like for the first arc special case), but how do we know
@@ -748,7 +698,7 @@ def route(semiarcs):
         # Get the semiarc IDs for the UP / DOWN strands
         u = semiarc_map[i, Dir.UP]
         d = semiarc_map[i, Dir.DOWN]
-        print(x, 2, lower, upper[::-1], d, u)
+        # print(x, 2, lower, upper[::-1], d, u)
 
         push_or_pop_upper(u)
         push_or_pop_lower(d)
@@ -758,7 +708,7 @@ def route(semiarcs):
 
         # Process the rightward (exiting) strand for the crossing.
         r = semiarc_map[i, Dir.RIGHT]
-        print(x, 3, lower, upper[::-1], r)
+        # print(x, 3, lower, upper[::-1], r)
 
         # If this assertion fails, how will we know which side to pop
         # from? If we just choose an arbitrary side we won't fail to
@@ -800,11 +750,11 @@ def route(semiarcs):
     # Hence, abs(len(upper) - len(lower)) <= 1.
     assert abs(len(upper) - len(lower)) <= 1
     while upper and lower:
-        print(lower, upper[::-1])
+        # print(lower, upper[::-1])
         assert pop_upper() == pop_lower()
         x += 1
 
-    print(lower, upper[::-1])
+    # print(lower, upper[::-1])
 
     # Cleanup the "leftover" return c
     if peek(upper, semiarc_map[1, Dir.LEFT]):
@@ -812,7 +762,7 @@ def route(semiarcs):
     elif peek(lower, semiarc_map[1, Dir.LEFT]):
         lower.pop()
 
-    print(lower, upper[::-1])
+    # print(lower, upper[::-1])
 
     # Ensure that there's nothing else remaining to pop.
     assert upper == lower == []
@@ -839,116 +789,33 @@ def route(semiarcs):
 
 
 if __name__ == "__main__":
-    B = BraidGroup(4)
-    K = Knot(B([1, 1, 1]))
-    # K = Knot(B([1,1,1,2,-1,2,-3,2,-3]))
-
-    # K = Knot([[3,1,2,4], [8,9,1,7], [5,6,7,3], [4,18,6,5],
-    #           [17,19,8,18], [9,10,11,14], [10,12,13,11],
-    #           [12,19,15,13], [20,16,14,15], [16,20,17,2]])
-
-    K = Link(
-        [
-            [
-                [
-                    1,
-                    -2,
-                    -3,
-                    -8,
-                    -12,
-                    13,
-                    -14,
-                    15,
-                    -7,
-                    -1,
-                    2,
-                    -4,
-                    10,
-                    11,
-                    -13,
-                    12,
-                    -11,
-                    -16,
-                    4,
-                    3,
-                    -5,
-                    6,
-                    -9,
-                    7,
-                    -15,
-                    14,
-                    16,
-                    -10,
-                    8,
-                    9,
-                    -6,
-                    5,
-                ]
-            ],
-            [-1, -1, 1, 1, 1, 1, -1, 1, 1, -1, 1, -1, -1, -1, -1, -1],
-        ]
-    )
-
-    # K = Knot([[[-1,2,-3,4,-5,6,-7,1,-4,8,-6,5,-8,3,-2,7]], [-1,-1,-1,-1,1,1,-1,-1]])
-    # import gauss_codes
-    # K = Knot(nelson_gc_to_sage_gc(gauss_codes.gknot[11,2]))
-    # K = Knot(
-    #     [
-    #         [1, 5, 2, 4],
-    #         [3, 8, 4, 9],
-    #         [5, 11, 6, 10],
-    #         [14, 7, 15, 8],
-    #         [9, 2, 10, 3],
-    #         [18, 12, 19, 11],
-    #         [6, 13, 7, 14],
-    #         [22, 15, 23, 16],
-    #         [20, 18, 21, 17],
-    #         [12, 20, 13, 19],
-    #         [24, 21, 1, 22],
-    #         [16, 23, 17, 24],
-    #     ]
-    # )
-    # K = Knot(
-    #     [
-    #         [4, 2, 5, 1],
-    #         [8, 4, 9, 3],
-    #         [12, 9, 1, 10],
-    #         [10, 5, 11, 6],
-    #         [6, 11, 7, 12],
-    #         [2, 8, 3, 7],
-    #     ]
-    # )
-
-    # crossings, semiarcs = knot_to_layout(K)
     import gauss_codes
+    from tikz_plotter import plot_virtual, virtual_mosaic
 
-    for key in (
-        # [(4, i) for i in range(82, 91)] + [(4, i) for i in range(96, 99)] + [(4, 107)]
-        # [(4, 84 + i * 0.25) for i in range(4)]
-        # (4, 26),
-        gauss_codes.vknot.keys()
-    ):
+    for key in tqdm(gauss_codes.vknot.keys()):
         gc = gauss_codes.vknot[(key)]
         # gc = gauss_codes.conn_sum(gauss_codes.gknot[10, 132], gauss_codes.gknot[8, 19])
         # gc = gauss_codes.conn_sum(gc, gauss_codes.gknot[6, 2], ind=10)
         # gc = gauss_codes.conn_sum(gc, gauss_codes.gknot[8, 13], ind=5)
-        # K = Knot(nelson_gc_to_sage_gc(gc))
         K = Knot(nelson_gc_to_sage_gc(gc))
+        # K = Knot([gc], orient)
 
-        print(key)
+        # print(key)
         crossings, semiarcs = knot_to_layout(K)
-        # pp = PrettyPrinter(width=70, compact=True)
-        # pp.pprint(crossings)
-        # pp.pprint(semiarcs)
 
         try:
             upper_cs, lower_cs, crossings = virtual_route(semiarcs)
         except AssertionError as e:
             raise (e)
-        plot(upper_cs, lower_cs, crossings, straight=0)
-
-    # for name, n_gc in gauss_codes.gknot.items():
-    #     print("="*10 + " " + str(name))
-    #     K = Knot(nelson_gc_to_sage_gc(n_gc))
-    #     crossings, semiarcs = knot_to_layout(K)
-    #     plot(*route(semiarcs), straight=0)
+        # print(upper_cs)
+        # print(lower_cs)
+        # print(crossings)
+        # plot(upper_cs, lower_cs, crossings, straight=0)
+        [gc], orient = nelson_gc_to_sage_gc(gc)
+        cn, kind = key
+        dirname = f"{cn}-{kind}"
+        plot_virtual(
+            gc, orient, upper_cs, lower_cs, crossings, dirname, use_fk_colors=False,
+        )
+    print(os.getcwd())
+    virtual_mosaic()

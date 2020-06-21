@@ -18,7 +18,7 @@ from multiprocessing import Pool
 # For executing the compile command
 from subprocess import run
 
-from ..linear_presentation import Dir, fix_gc_order
+# from ..linear_presentation import Dir, fix_gc_order
 
 
 class Dir(Enum):
