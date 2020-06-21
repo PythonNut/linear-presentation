@@ -415,7 +415,15 @@ def compute_intersections(upper_cs, lower_cs):
 
 
 def plot_virtual(
-    gc, orient, upper_cs, lower_cs, crossings, dirname, use_fk_colors=False,
+    gc,
+    orient,
+    upper_cs,
+    lower_cs,
+    crossings,
+    dirname,
+    dir_prefix="example-execution/virtuals/",
+    use_fk_colors=False,
+    warn_classical=True,
 ):
     """
     Plot a single step in the execution of the algorithm.
@@ -426,7 +434,7 @@ def plot_virtual(
     `i`: the current step of the computation. Used to generate the
          filename.
     """
-    expanded_dirname = f"example-execution/virtuals/{dirname}/"
+    expanded_dirname = f"{dir_prefix}{dirname}/"
     if not os.path.exists(expanded_dirname):
         os.mkdir(expanded_dirname)
 
@@ -462,7 +470,7 @@ def plot_virtual(
     x = max(x_vals)
 
     int_pts = compute_intersections(upper_cs, lower_cs)
-    if not int_pts:
+    if warn_classical and (not int_pts):
         print(f"knot {dirname} had no virtual crossings!")
     for (x, y) in int_pts:
         out_str += f"\\draw ({x}, {y}) circle (.25);\n"
@@ -563,8 +571,8 @@ def get_prefix(fname):
     return tuple([int(glyph) for glyph in fname.split(".")[0].split("-")])
 
 
-def virtual_mosaic():
-    os.chdir("example-execution/virtuals")
+def make_mosaic(flavor="virtuals"):
+    os.chdir(f"example-execution/{flavor}")
     # Filter for pdfs with a `-` in the name
     knots = [fname for fname in os.listdir() if "-" in fname]
 
@@ -631,81 +639,11 @@ def virtual_mosaic():
         out_str += "\\end{figure}\n\\vfill\n"
     out_str += r"\end{document}"
 
-    with open("virtual_mosaic.tex", "w") as f:
+    with open(f"{flavor}_mosaic.tex", "w") as f:
         f.write(out_str)
 
     # Use lualatex in case the mosaic exceeds pdflatex memory limit
-    subprocess.run(["lualatex", "virtual_mosaic.tex"], capture_output=True)
+    subprocess.run(["lualatex", f"{flavor}_mosaic.tex"], capture_output=True)
     os.chdir("../..")
 
     return
-
-
-def classical_mosaic():
-    # Filter for pdfs with a `-` in the name
-    knots = [
-        fname for fname in listdir("finals") if (".pdf" in fname) and ("-" in fname)
-    ]
-
-    knots = sorted(knots, key=get_prefix)
-
-    l = ceil(sqrt(len(knots)))
-    spacing = 0.9 / l
-
-    out_str = r"""\documentclass{article}
-    \usepackage{fkmath}
-    \usepackage{float}
-    \usepackage{subcaption}
-    \usepackage{graphicx}
-
-    \allowdisplaybreaks
-    \pagestyle{empty}
-    """
-
-    # Comment this out for standard colors:
-    out_str += r"""\usepackage{xcolor} % For customizing page color and such
-    \definecolor{bcol}{HTML}{1D252C}
-    \definecolor{tcol}{HTML}{D6D7D9}
-    \pagecolor{bcol}
-    \color{tcol}
-    """
-    out_str += (
-        "\\usepackage[margin=.5in, landscape, papersize={"
-        + str(1 + 2 * l)
-        + "in, "
-        + str(1 + 2 * l)
-        + "in}]{geometry}"
-    )
-
-    out_str += r"\begin{document}"
-
-    # Lay out the knots in a grid table
-    for row in range(l):
-        out_str += "\\begin{figure}[H]\n\\centering\n"
-        for col in range(l):
-            index = row * l + col
-            if index == len(knots):
-                out_str += r"\hfill"
-            elif index > len(knots):
-                continue
-            else:
-                fname = knots[index]
-                label = get_prefix(fname)
-
-                out_str += (
-                    r"\begin{subfigure}[t]{" + str(spacing) + r"\textwidth}" + "\n"
-                )
-                out_str += r"\centering" + "\n"
-                out_str += r"\includegraphics[width = .95in]{" + fname + "}\n"
-                out_str += r"\caption*{$" + f"{label}" + "$}" + "\n"
-                out_str += r"\end{subfigure}" + "\n"
-
-        out_str += "\\end{figure}\n\\vfill\n"
-    out_str += r"\end{document}"
-
-    with open("finals/mosaic.tex", "w") as f:
-        f.write(out_str)
-
-    os.chdir("finals")
-    subprocess.run(["pdflatex", "mosaic.tex"])
-    os.chdir("..")

@@ -785,10 +785,57 @@ def route(semiarcs):
     return upper_cs, lower_cs, crossings
 
 
+def get_cknots(max_cnum=10):
+    """
+    Get all classical prime knots up to 10 crossings
+    """
+    from data.classical_gauss_codes import gknot
+
+    return dict(
+        filter(lambda key_val_pair: key_val_pair[0][0] <= max_cnum, gknot.items())
+    )
+
+
 def get_vknots(max_cnum=5):
     from data.virtual_gauss_codes import vknot
 
-    return dict(filter(lambda key: key[0][0] <= max_cnum, vknot.items()))
+    return dict(
+        filter(lambda key_val_pair: key_val_pair[0][0] <= max_cnum, vknot.items())
+    )
+
+
+def proc_single_cknot(key):
+    global knot_dict
+    kcode = list(knot_dict[key])
+    # The knot dict already has in sage gc format
+    K = Knot(kcode)
+    crossings, semiarcs = knot_to_layout(K)
+
+    # Experimental: Use virtual routing for classical knots as well
+    try:
+        upper_cs, lower_cs, crossings = route(semiarcs)
+    except AssertionError as e:
+        print(key)
+        raise (e)
+
+    [gc], orient = kcode
+    cn, kind = key
+    dirname = f"{cn}-{kind}"
+    try:
+        plot_virtual(
+            gc,
+            orient,
+            upper_cs,
+            lower_cs,
+            crossings,
+            dirname,
+            dir_prefix="example-execution/classicals/",
+            use_fk_colors=False,
+            warn_classical=False,
+        )
+    except ZeroDivisionError as e:
+        print(key)
+        raise (e)
 
 
 def proc_single_vknot(key):
@@ -815,19 +862,25 @@ def proc_single_vknot(key):
         raise (e)
 
 
-def main():
+def proc_all(flavor="classicals"):
     global knot_dict
-    knot_dict = get_vknots(max_cnum=5)
+    if flavor == "classicals":
+        knot_dict = get_cknots(max_cnum=11)
+        proc_func = proc_single_cknot
+    elif flavor == "virtuals":
+        knot_dict = get_vknots(max_cnum=5)
+        proc_func = proc_single_vknot
+
     _n = len(knot_dict)
-    with Pool(6) as p:
+    with Pool(7) as p:
         with tqdm(total=_n) as pbar:
-            for i, _ in enumerate(p.imap_unordered(proc_single_vknot, knot_dict)):
+            for i, _ in enumerate(p.imap_unordered(proc_func, knot_dict)):
                 pbar.update()
 
-    virtual_mosaic()
+    make_mosaic(flavor)
 
 
 if __name__ == "__main__":
-    from tikz_plotter import plot_virtual, virtual_mosaic
+    from tikz_plotter import plot_virtual, make_mosaic
 
-    main()
+    proc_all(flavor="virtuals")
