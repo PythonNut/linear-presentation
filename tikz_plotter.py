@@ -3,6 +3,10 @@ import itertools as it
 import subprocess
 from math import sqrt, ceil
 
+# How far up /down in y we can draw the crossing before starting to
+# curve
+cwidth = 0.75
+
 
 def crossing_tex(cnum, orient, x, xcurr, add_labels=False):
     """
@@ -15,36 +19,51 @@ def crossing_tex(cnum, orient, x, xcurr, add_labels=False):
     `xcurr`: the x value for the vertical dashed line
     """
     out_str = ""
-    gap = 0.2
+    gap = 0.3
     if cnum < 0:
         out_str += f"    \\draw ({x - 1}, 0) -- ({x - gap}, 0);\n"
-        out_str += f"    \\draw[-latex] ({x + gap}, 0) -- ({x + .5}, 0);\n"
-        out_str += f"    \\draw ({x + .5}, 0) -- ({x + 1}, 0);\n"
+        out_str += f"    \\draw[-{{Latex[length=3mm]}}] ({x + gap}, 0) -- ({x + cwidth + .1}, 0);\n"
+        # Go a little bit farther back to make the strand look
+        # continuous (-.1)
+        out_str += f"    \\draw ({x + cwidth - .1}, 0) -- ({x + 1}, 0);\n"
         if orient == 1:
-            out_str += f"    \\draw[-latex] ({x}, .5) -- ({x}, -.5);\n"
+            # Draw once with the arrow and once in plain just to get
+            # rid of the annoying weird gap between arrowtip and
+            # subsequent strand
+            out_str += f"    \\draw[-{{Latex[length=3mm]}}] ({x}, {cwidth}) -- ({x}, -{cwidth + .1});\n"
+            # Similar to the above, overdraw a little bit to get the
+            # line to appear under the arrowtip
+            # out_str += f"    \\draw ({x}, {cwidth}) -- ({x}, -{cwidth + .1});\n"
         elif orient == -1:
-            out_str += f"    \\draw[-latex] ({x}, -.5) -- ({x}, .5);\n"
+            # Ibid
+            out_str += f"    \\draw[-{{Latex[length=3mm]}}] ({x}, -{cwidth}) -- ({x}, {cwidth + .1});\n"
+            # Similar to the above, overdraw a little bit to get the
+            # line to appear under the arrowtip
+            # out_str += f"    \\draw ({x}, -{cwidth}) -- ({x}, {cwidth + .1});\n"
         else:
             assert False
     else:
-        out_str += f"    \\draw ({x -1}, 0) -- ({x + 1}, 0);\n"
-        out_str += f"    \\draw[-latex] ({x + gap}, 0) -- ({x + .5}, 0);\n"
+        out_str += f"    \\draw ({x - 1}, 0) -- ({x + 1}, 0);\n"
+        out_str += f"    \\draw[-{{Latex[length=3mm]}}] ({x + gap}, 0) -- ({x + cwidth + .1}, 0);\n"
+        # out_str += f"    \\draw ({x + gap}, 0) -- ({x + cwidth}, 0);\n"
         if orient == 1:
-            out_str += f"    \\draw ({x}, -.5) -- ({x}, -{gap});\n"
-            out_str += f"    \\draw[-latex] ({x}, {gap}) -- ({x}, .5);\n"
+            out_str += f"    \\draw ({x}, -{cwidth}) -- ({x}, -{gap});\n"
+            out_str += f"    \\draw[-{{Latex[length=3mm]}}] ({x}, {gap}) -- ({x}, {cwidth + .1});\n"
+            # out_str += f"    \\draw ({x}, {gap}) -- ({x}, {cwidth});\n"
         elif orient == -1:
-            out_str += f"    \\draw ({x}, .5) -- ({x}, {gap});\n"
-            out_str += f"    \\draw[-latex] ({x}, -{gap}) -- ({x}, -.5);\n"
+            out_str += f"    \\draw ({x}, {cwidth}) -- ({x}, {gap});\n"
+            out_str += f"    \\draw[-{{Latex[length=3mm]}}] ({x}, -{gap}) -- ({x}, -{cwidth+.1});\n"
+            # out_str += f"    \\draw ({x}, -{gap}) -- ({x}, -{cwidth});\n"
         else:
             assert False
 
     if add_labels:
 
         lab = f"$\\small {abs(cnum)}"
-        if cnum < 0:
-            lab += "_u"
-        else:
-            lab += "_o"
+        # if cnum < 0:
+        #     lab += "_u"
+        # else:
+        #     lab += "_o"
 
         if orient == 1:
             lab += "^+"
@@ -127,15 +146,8 @@ def arc_tex(
 
     # Handle the arcs that connect things directly along the horizontal
     if r == 0.5:
-        # if xcurr < x0:
-        #     out_str += f"    \\draw[opacity=.2] ({x0-.5}, 0) -- ({x1+.5}, 0);\n"
-        # elif x1 < xcurr:
         out_str += f"    \\draw ({x0 - .5}, 0) -- ({x1 + .5}, 0);\n"
-        # else:
-        #     out_str += f"    \\draw ({x0 - .5}, 0) -- ({xcurr}, 0);\n"
-        #     out_str += f"    \\draw[opacity=.2] ({xcurr}, 0) -- ({x1 + .5}, 0);\n"
         return out_str
-
     if x0 < x1:
         t0 = 180
         t1 = 0
@@ -143,32 +155,19 @@ def arc_tex(
         t0 = 0
         t1 = 180
 
-    # if xcurr < x0:
-    #     out_str += f"    \\draw[opacity=.2] ({x0}, {y}) arc ({t0}:{t1}:{r});\n"
-    #     # print(x0, x1, xcurr, y, s)
-    #     # assert False
-
-    # elif xcurr < x1:
-    #     # Find the angle to draw until such that our arc meets the
-    #     # dotted line
-    #     thalf =
-    #     out_str += f"    \\draw[opacity=.6] ({x0},  {y}) arc ({t0}:{thalf}:{r});\n"
-    #     out_str += f"    \\draw[opacity=.2] ({x1},  {y}) arc ({t1}:{thalf}:{r});\n"
-
-    # else:
     out_str += f"    \\draw ({x0}, {y}) arc ({t0}:{t1}:{r});\n"
 
     if x0_through:
         if xcurr < x0:
-            out_str += f"\\draw ({x0}, {y}) -- ({x0}, 0);\n"
+            out_str += f"    \\draw ({x0}, {y}) -- ({x0}, 0);\n"
         else:
-            out_str += f"\\draw ({x0}, {y}) -- ({x0}, 0);\n"
+            out_str += f"    \\draw ({x0}, {y}) -- ({x0}, 0);\n"
 
     if x1_through:
         if xcurr < x1:
-            out_str += f"\\draw ({x1}, {y}) -- ({x1}, 0);\n"
+            out_str += f"    \\draw ({x1}, {y}) -- ({x1}, 0);\n"
         else:
-            out_str += f"\\draw ({x1}, {y}) -- ({x1}, 0);\n"
+            out_str += f"    \\draw ({x1}, {y}) -- ({x1}, 0);\n"
 
     return out_str
 
@@ -242,7 +241,8 @@ def plot_one_step(
     # print(gc, len(gc), nmax)
 
     out_str = r"""\documentclass[border=1pt]{standalone}
-\usepackage{tikz}"""
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}"""
 
     if use_fk_colors:
         out_str += r"""\usepackage{xcolor} % For customizing page color and such
@@ -252,7 +252,7 @@ def plot_one_step(
 \color{tcol}"""
 
     out_str += r"""\begin{document}
-  \begin{tikzpicture}[every draw/.style={line width=20pt}]
+  \begin{tikzpicture}[every path/.style={line width=1pt}]
     """
     x, upper, lower, upper_cs, lower_cs, crossings = state
     # print(state)
@@ -315,7 +315,7 @@ def plot_one_step(
             if upper_cs_f[s] != []:
                 out_str += arc_tex(x0, x1, x, 0.5, s, x0_through=x0_t, x1_through=x1_t)
 
-    out_str += "\\begin{scope}[yscale=-1]"
+    out_str += "    \\begin{scope}[yscale=-1]"
     for s in lower_cs_f.keys():
         # Special case for if we get the first arc
         if lower_cs_f[s] == []:
@@ -342,7 +342,7 @@ def plot_one_step(
             if lower_cs_f[s] != []:
                 out_str += arc_tex(x0, x1, x, 0.5, s, x0_through=x0_t, x1_through=x1_t)
 
-    out_str += "\\end{scope}"
+    out_str += "    \\end{scope}\n"
     out_str += "  \\end{tikzpicture}\n\\end{document}"
     with open(fname, "w") as f:
         f.write(out_str)
@@ -369,7 +369,7 @@ def circle_int_point(xl1, xr1, xl2, xr2):
     yint = (
         sqrt(abs(4 * (d ** 2) * (r1 ** 2) - (d ** 2 - r2 ** 2 + r1 ** 2) ** 2))
         / (2 * d)
-        + 0.5
+        + cwidth
     )
 
     # print(f"yint: {yint}")
@@ -445,7 +445,8 @@ def plot_virtual(
     nmax = len(gc) // 2
 
     out_str = r"""\documentclass[border=1pt]{standalone}
-\usepackage{tikz}"""
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}"""
 
     if use_fk_colors:
         out_str += r"""\usepackage{xcolor} % For customizing page color and such
@@ -455,7 +456,7 @@ def plot_virtual(
 \color{tcol}"""
 
     out_str += r"""\begin{document}
-  \begin{tikzpicture}[every draw/.style={line width=20pt}]
+  \begin{tikzpicture}[every path/.style={line width=1pt}]
     """
     x_vals = set()
     for key in upper_cs:
@@ -485,7 +486,9 @@ def plot_virtual(
             ind -= 0.5
 
         if abs(c) not in seen_cs:
-            out_str += crossing_tex(c, orient[len(seen_cs)], crossings[len(seen_cs)], x)
+            out_str += crossing_tex(
+                c, orient[len(seen_cs)], crossings[len(seen_cs)], x, add_labels=True
+            )
             seen_cs.add(abs(c))
         i += 1
 
@@ -514,9 +517,11 @@ def plot_virtual(
 
             # If not in the special case, do the regular call
             if upper_cs[s] != []:
-                out_str += arc_tex(x0, x1, x, 0.5, s, x0_through=x0_t, x1_through=x1_t)
+                out_str += arc_tex(
+                    x0, x1, x, cwidth, s, x0_through=x0_t, x1_through=x1_t
+                )
 
-    out_str += "\\begin{scope}[yscale=-1]\n"
+    out_str += "    \\begin{scope}[yscale=-1]\n"
     for s in lower_cs.keys():
         # Special case for if we get the first arc
         if lower_cs[s] == []:
@@ -541,10 +546,11 @@ def plot_virtual(
 
             # If not in the special case, do the regular call
             if lower_cs[s] != []:
-                out_str += arc_tex(x0, x1, x, 0.5, s, x0_through=x0_t, x1_through=x1_t)
+                out_str += arc_tex(
+                    x0, x1, x, cwidth, s, x0_through=x0_t, x1_through=x1_t
+                )
 
-    out_str += "\\end{scope}"
-    out_str += "  \\end{tikzpicture}\n\\end{document}"
+    out_str += "    \\end{scope}\n  \\end{tikzpicture}\n\\end{document}"
     with open(fname, "w") as f:
         f.write(out_str)
 
