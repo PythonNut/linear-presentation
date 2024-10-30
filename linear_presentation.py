@@ -131,7 +131,47 @@ def compact_paths(paths, crossings=[]):
     return result, new_crossings
 
 
-def plot(upper_cs, lower_cs, crossings=[], straight=0):
+def plot(upper_cs, lower_cs, crossings, overunder, straight=0, compress=True):
+    if compress:
+        def check_arc(a, b):
+            return abs(a - b) <= 1 and a - 1 in crossings and b + 1 in crossings
+
+        direct = [
+            (a, b)
+            for arcs in upper_cs.values()
+            for a, b in arcs
+            if check_arc(a, b)
+        ]
+        print(f"compressing: {direct}")
+        def shift(x):
+            x0 = x
+            for _, b in direct:
+                if x >= b:
+                    x0 -= 2
+            return x0
+
+        upper_cs = {
+            key: [(shift(a), shift(b)) for a, b in arcs if (a, b) not in direct]
+            for key, arcs in upper_cs.items()
+        }
+        lower_cs = {
+            key: [(shift(a), shift(b)) for a, b in arcs]
+            for key, arcs in lower_cs.items()
+        }
+        crossings = [shift(c) for c in crossings]
+
+    linewidth=2
+    spine_kwargs = dict(linewidth=linewidth)
+    arc_kwargs = dict(linewidth=linewidth)
+    dot_kwargs = dict(marker="s", color="w", markersize=10)
+
+    for x, ou in zip(crossings, overunder):
+        if ou < 0:
+            rshift = 1/2 if x + 1 in crossings else 1
+            lshift = 1/2 if x - 1 in crossings else 1
+            plt.plot([x - lshift, x + rshift], [0, 0], "k", zorder=0, **spine_kwargs)
+            plt.plot([x], [0], **dot_kwargs)
+
     def c_height(cs):
         all_arcs = []
         for arcs in cs.values():
@@ -166,21 +206,21 @@ def plot(upper_cs, lower_cs, crossings=[], straight=0):
             else:
                 h = upper_heights[a, b]
 
-        if straight >= 1 and abs(a - b) <= 1:
-            plt.plot([a, b], [0, 0], "k")
+        if straight >= 1 and abs(a - b) <= 1 and not compress:
+            plt.plot([a, b], [0, 0], "y", **arc_kwargs)
 
         elif straight >= 2:
             if down:
-                plt.plot([a, a, b, b], [0, -h, -h, 0], "k")
+                plt.plot([a, a, b, b], [0, -h, -h, 0], "k", **arc_kwargs)
             else:
-                plt.plot([a, a, b, b], [0, h, h, 0], "k")
+                plt.plot([a, a, b, b], [0, h, h, 0], "k", **arc_kwargs)
 
         else:
             c = (a + b) / 2
             if down:
-                plt.gca().add_patch(mpl.patches.Arc((c, y), h, h, theta1=180))
+                plt.gca().add_patch(mpl.patches.Arc((c, y), h, h, theta1=180, zorder=100, **arc_kwargs))
             else:
-                plt.gca().add_patch(mpl.patches.Arc((c, y), h, h, theta2=180))
+                plt.gca().add_patch(mpl.patches.Arc((c, y), h, h, theta2=180, zorder=100, **arc_kwargs))
 
     for arcs in upper_cs.values():
         for (a, b) in arcs:
@@ -195,8 +235,13 @@ def plot(upper_cs, lower_cs, crossings=[], straight=0):
     #     for j, (a, b) in enumerate(zip(path, path[1:])):
     #         add_arc(a, b, 0, (par + j) % 2 == 0)
 
-    for x in crossings:
-        plt.plot([x - 1, x + 1], [0, 0], "k")
+    print(crossings)
+    for x, ou in zip(crossings, overunder):
+        if ou > 0:
+            plt.plot([x], [0], zorder=200, **dot_kwargs)
+            rshift = 1/2 if x + 1 in crossings else 1
+            lshift = 1/2 if x - 1 in crossings else 1
+            plt.plot([x - lshift, x + rshift], [0, 0], "k", zorder=300, **spine_kwargs)
 
     plt.gcf().set_size_inches(10.5, 18.5)
     ax = plt.gcf().gca()
@@ -230,7 +275,14 @@ def knot_to_layout(K):
     [gc], orient = K.oriented_gauss_code()
     gc, orient = fix_gc_order(gc, orient)
     crossings, semiarcs = linear_layout(gc, orient)
-    return crossings, semiarcs
+    seen = set()
+    overunder = []
+    for crossing in gc:
+        if abs(crossing) in seen:
+            continue
+        seen.add(abs(crossing))
+        overunder.append(sign(crossing))
+    return crossings, semiarcs, overunder
 
 
 def plain_semiarcs(semiarcs):
